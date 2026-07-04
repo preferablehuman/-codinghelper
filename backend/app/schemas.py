@@ -1,0 +1,145 @@
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class JobCreate(BaseModel):
+    title: str | None = None
+    problem_text: str = Field(min_length=10)
+    language: str = "python"
+    difficulty: str | None = None
+    source_urls: list[str] = Field(default_factory=list)
+
+
+class JobCreated(BaseModel):
+    job_id: str
+    status: str
+
+
+class JobStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    progress_percent: int
+    current_step: str
+    error_message: str | None = None
+
+
+class JobListItem(BaseModel):
+    id: str
+    title: str | None
+    language: str
+    difficulty: str | None
+    status: str
+    progress_percent: int
+    current_step: str
+    detected_pattern: str | None
+    created_at: datetime
+    completed_at: datetime | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SourceDocumentOut(BaseModel):
+    id: str
+    title: str
+    url: str
+    source_name: str
+    source_tier: int
+    license_note: str | None
+    retrieval_method: str
+    is_cache_allowed: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EvidenceItemOut(BaseModel):
+    id: str
+    claim: str
+    support_score: float
+    source_chunk_id: str | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class GeneratedSolutionOut(BaseModel):
+    id: str
+    approach_type: str
+    algorithm_pattern: str
+    explanation: str
+    pseudocode: str
+    code: str
+    time_complexity: str
+    space_complexity: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TestCaseOut(BaseModel):
+    id: str
+    input_data: str
+    expected_output: str | None
+    test_type: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class VerificationRunOut(BaseModel):
+    id: str
+    status: str
+    stdout: str
+    stderr: str
+    execution_time_ms: int
+    memory_used_mb: int | None
+    passed_count: int
+    failed_count: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ExplanationOut(BaseModel):
+    id: str
+    intuition: str
+    brute_force: str
+    optimized_approach: str
+    dry_run: str
+    pitfalls: str
+    complexity_analysis: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SlideArtifactOut(BaseModel):
+    id: str
+    markdown_path: str
+    html_path: str | None
+    pdf_path: str | None
+    pptx_path: str | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class JobDetail(BaseModel):
+    id: str
+    title: str | None
+    problem_text: str
+    language: str
+    difficulty: str | None
+    status: str
+    progress_percent: int
+    current_step: str
+    error_message: str | None
+    detected_pattern: str | None
+    problem_summary: str | None
+    created_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None
+    sources: list[SourceDocumentOut] = Field(default_factory=list)
+    evidence_items: list[EvidenceItemOut] = Field(default_factory=list)
+    solutions: list[GeneratedSolutionOut] = Field(default_factory=list)
+    test_cases: list[TestCaseOut] = Field(default_factory=list)
+    verification_runs: list[VerificationRunOut] = Field(default_factory=list)
+    explanations: list[ExplanationOut] = Field(default_factory=list)
+    slide_artifacts: list[SlideArtifactOut] = Field(default_factory=list)
+
+    model_config = ConfigDict(from_attributes=True)
+

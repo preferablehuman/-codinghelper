@@ -1,0 +1,200 @@
+x-docker-log-options: &docker-log-options
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "10"
+
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+      - NPM_CONFIG_CACHE=/app/.npm-cache
+      - VERBOSE_LOGGING=${VERBOSE_LOGGING:-false}
+      - LOG_DIR=/app/logs
+      - LOG_MAX_BYTES=${LOG_MAX_BYTES:-10485760}
+      - LOG_MAX_FILES=${LOG_MAX_FILES:-10}
+    volumes:
+      - ./frontend/src:/app/src:ro
+      - ./frontend/index.html:/app/index.html:ro
+      - ./frontend/package.json:/app/package.json:ro
+      - ./frontend/tsconfig.json:/app/tsconfig.json:ro
+      - ./frontend/tsconfig.node.json:/app/tsconfig.node.json:ro
+      - ./frontend/vite.config.ts:/app/vite.config.ts:ro
+      - ./frontend/tailwind.config.ts:/app/tailwind.config.ts:ro
+      - ./frontend/postcss.config.js:/app/postcss.config.js:ro
+      - ./scripts/tee-rotate.sh:/logging/tee-rotate.sh:ro
+      - ./data/frontend/node_modules:/app/node_modules
+      - ./data/frontend/npm-cache:/app/.npm-cache
+      - ./logs/frontend:/app/logs
+    command: sh -c "if [ \"${VERBOSE_LOGGING:-false}\" = \"true\" ]; then export DEBUG=vite:*; fi; sh /logging/tee-rotate.sh frontend npm install --package-lock=false && sh /logging/tee-rotate.sh frontend npm run dev -- --host 0.0.0.0"
+    logging: *docker-log-options
+    depends_on:
+      backend:
+        condition: service_started
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - HF_HOME=/app/data/model-cache/huggingface
+      - HUGGINGFACE_HUB_CACHE=/app/data/model-cache/huggingface
+      - TRANSFORMERS_CACHE=/app/data/model-cache/huggingface
+      - SENTENCE_TRANSFORMERS_HOME=/app/data/model-cache/sentence-transformers
+      - LOG_DIR=/app/logs
+      - LOG_MAX_BYTES=${LOG_MAX_BYTES:-10485760}
+      - LOG_MAX_FILES=${LOG_MAX_FILES:-10}
+    volumes:
+      - ./backend/app:/app/app:ro
+      - ./backend/alembic.ini:/app/alembic.ini:ro
+      - ./scripts/tee-rotate.sh:/logging/tee-rotate.sh:ro
+      - ./scripts/run-backend.sh:/logging/run-backend.sh:ro
+      - ./data/backend/artifacts:/app/data/artifacts
+      - ./data/backend/model-cache:/app/data/model-cache
+      - ./data/backend/source-cache:/app/data/source-cache
+      - ./logs/backend:/app/logs
+    command: sh /logging/run-backend.sh
+    logging: *docker-log-options
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      sandbox-runner:
+        condition: service_started
+      slide-renderer:
+        condition: service_started
+      ollama:
+        condition: service_healthy
+
+  ollama:
+    image: ollama/ollama:latest
+    entrypoint: []
+    gpus: all
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5-coder:7b}
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:--1}
+      - OLLAMA_REQUIRE_GPU=${OLLAMA_REQUIRE_GPU:-true}
+      - OLLAMA_NUM_PARALLEL=${OLLAMA_NUM_PARALLEL:-1}
+      - OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAX_LOADED_MODELS:-1}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - VERBOSE_LOGGING=${VERBOSE_LOGGING:-false}
+      - LOG_DIR=/app/logs
+      - LOG_MAX_BYTES=${LOG_MAX_BYTES:-10485760}
+      - LOG_MAX_FILES=${LOG_MAX_FILES:-10}
+    volumes:
+      - ./data/ollama:/root/.ollama
+      - ./scripts/tee-rotate.sh:/logging/tee-rotate.sh:ro
+      - ./scripts/run-ollama.sh:/logging/run-ollama.sh:ro
+      - ./logs/ollama:/app/logs
+    command: ["/bin/sh", "/logging/tee-rotate.sh", "ollama", "/bin/sh", "/logging/run-ollama.sh"]
+    logging: *docker-log-options
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/ollama-gpu-ready && OLLAMA_HOST=127.0.0.1:11434 ollama list | grep -F \"${OLLAMA_MODEL:-qwen2.5-coder:7b}\" >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 180
+      start_period: 15s
+
+  postgres:
+    image: postgres:16
+    entrypoint: []
+    environment:
+      - POSTGRES_DB=programming_explainer
+      - POSTGRES_USER=explainer
+      - POSTGRES_PASSWORD=explainer
+      - VERBOSE_LOGGING=${VERBOSE_LOGGING:-false}
+      - LOG_DIR=/app/logs
+      - LOG_MAX_BYTES=${LOG_MAX_BYTES:-10485760}
+      - LOG_MAX_FILES=${LOG_MAX_FILES:-10}
+      - POSTGRES_LOG_MIN_MESSAGES=${POSTGRES_LOG_MIN_MESSAGES:-info}
+      - POSTGRES_LOG_MIN_DURATION_STATEMENT=${POSTGRES_LOG_MIN_DURATION_STATEMENT:-1000}
+      - POSTGRES_LOG_CONNECTIONS=${POSTGRES_LOG_CONNECTIONS:-on}
+      - POSTGRES_LOG_DISCONNECTIONS=${POSTGRES_LOG_DISCONNECTIONS:-on}
+      - POSTGRES_LOG_STATEMENT=${POSTGRES_LOG_STATEMENT:-none}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./scripts/tee-rotate.sh:/logging/tee-rotate.sh:ro
+      - ./logs/postgres:/app/logs
+    command: sh -c "if [ \"${VERBOSE_LOGGING:-false}\" = \"true\" ]; then sh /logging/tee-rotate.sh postgres docker-entrypoint.sh postgres -c log_min_messages=debug1 -c log_min_duration_statement=0 -c log_connections=${POSTGRES_LOG_CONNECTIONS:-on} -c log_disconnections=${POSTGRES_LOG_DISCONNECTIONS:-on} -c log_statement=${POSTGRES_LOG_STATEMENT:-none}; else sh /logging/tee-rotate.sh postgres docker-entrypoint.sh postgres -c log_min_messages=${POSTGRES_LOG_MIN_MESSAGES:-info} -c log_min_duration_statement=${POSTGRES_LOG_MIN_DURATION_STATEMENT:-1000} -c log_connections=${POSTGRES_LOG_CONNECTIONS:-on} -c log_disconnections=${POSTGRES_LOG_DISCONNECTIONS:-on} -c log_statement=${POSTGRES_LOG_STATEMENT:-none}; fi"
+    logging: *docker-log-options
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U explainer -d programming_explainer"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    entrypoint: []
+    ports:
+      - "6333:6333"
+    environment:
+      - VERBOSE_LOGGING=${VERBOSE_LOGGING:-false}
+      - QDRANT_LOG_LEVEL=${QDRANT_LOG_LEVEL:-info}
+      - LOG_DIR=/app/logs
+      - LOG_MAX_BYTES=${LOG_MAX_BYTES:-10485760}
+      - LOG_MAX_FILES=${LOG_MAX_FILES:-10}
+    volumes:
+      - ./data/qdrant:/qdrant/storage
+      - ./scripts/tee-rotate.sh:/logging/tee-rotate.sh:ro
+      - ./logs/qdrant:/app/logs
+    command: sh -c "if [ \"${VERBOSE_LOGGING:-false}\" = \"true\" ]; then export QDRANT__LOG_LEVEL=DEBUG RUST_LOG=debug; else export QDRANT__LOG_LEVEL=${QDRANT_LOG_LEVEL:-info} RUST_LOG=${QDRANT_LOG_LEVEL:-info}; fi; if command -v qdrant >/dev/null 2>&1; then sh /logging/tee-rotate.sh qdrant qdrant; else sh /logging/tee-rotate.sh qdrant ./qdrant; fi"
+    logging: *docker-log-options
+
+  sandbox-runner:
+    build: ./sandbox-runner
+    ports:
+      - "8100:8100"
+    environment:
+      - SANDBOX_TIMEOUT_SECONDS=5
+      - SANDBOX_MEMORY_MB=256
+      - SANDBOX_WORK_DIR=/sandbox-work
+      - VERBOSE_LOGGING=${VERBOSE_LOGGING:-false}
+      - LOG_DIR=/app/logs
+      - LOG_MAX_BYTES=${LOG_MAX_BYTES:-10485760}
+      - LOG_MAX_FILES=${LOG_MAX_FILES:-10}
+    volumes:
+      - ./sandbox-runner/app:/app/app:ro
+      - ./sandbox-runner/tests:/app/tests:ro
+      - ./scripts/tee-rotate.sh:/logging/tee-rotate.sh:ro
+      - ./scripts/run-sandbox.sh:/logging/run-sandbox.sh:ro
+      - ./data/sandbox-runner/work:/sandbox-work
+      - ./logs/sandbox-runner:/app/logs
+    command: sh /logging/run-sandbox.sh
+    logging: *docker-log-options
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  slide-renderer:
+    build: ./slide-renderer
+    ports:
+      - "8200:8200"
+    environment:
+      - NPM_CONFIG_CACHE=/app/.npm-cache
+      - VERBOSE_LOGGING=${VERBOSE_LOGGING:-false}
+      - LOG_DIR=/app/logs
+      - LOG_MAX_BYTES=${LOG_MAX_BYTES:-10485760}
+      - LOG_MAX_FILES=${LOG_MAX_FILES:-10}
+    volumes:
+      - ./slide-renderer/server.js:/app/server.js:ro
+      - ./slide-renderer/package.json:/app/package.json:ro
+      - ./scripts/tee-rotate.sh:/logging/tee-rotate.sh:ro
+      - ./data/slide-renderer/node_modules:/app/node_modules
+      - ./data/slide-renderer/npm-cache:/app/.npm-cache
+      - ./data/slide-renderer/generated-slides:/slides
+      - ./logs/slide-renderer:/app/logs
+    command: sh -c "sh /logging/tee-rotate.sh slide-renderer npm install --package-lock=false && sh /logging/tee-rotate.sh slide-renderer npm start"
+    logging: *docker-log-options
