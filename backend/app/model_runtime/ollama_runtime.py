@@ -1,3 +1,9 @@
+"""Legacy reference only; active Ollama orchestration lives in model-gateway.
+
+This module is intentionally not imported by the application runtime and can be
+removed once the historical local-runtime migration is no longer needed.
+"""
+
 import logging
 import time
 from typing import Any

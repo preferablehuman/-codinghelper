@@ -2,8 +2,14 @@ import json
 from typing import Any
 
 
-def parse_json_object(text: str) -> dict[str, Any]:
+def parse_json_object(text: str, *, wrapper_keys: tuple[str, ...] = ()) -> dict[str, Any]:
     value = _parse_first_json_value(text)
+    value = _unwrap_single_object(value)
+    if isinstance(value, dict):
+        for key in wrapper_keys:
+            nested = _unwrap_single_object(value.get(key))
+            if isinstance(nested, dict):
+                return nested
     if not isinstance(value, dict):
         raise ValueError(f"Model response must contain a JSON object, got {type(value).__name__}.")
     return value
@@ -46,6 +52,12 @@ def _parse_first_json_value(text: str) -> Any:
         except json.JSONDecodeError:
             continue
     raise ValueError("Model response did not contain valid JSON.")
+
+
+def _unwrap_single_object(value: Any) -> Any:
+    if isinstance(value, list) and len(value) == 1 and isinstance(value[0], dict):
+        return value[0]
+    return value
 
 
 def response_preview(text: str, limit: int = 1200) -> str:

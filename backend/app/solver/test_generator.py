@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 def generate_tests(runtime: BaseModelRuntime, problem_text: str, language: str, solution: dict[str, str]) -> list[dict[str, str | None]]:
     logger.info("Generating tests language=%s problem_chars=%s code_chars=%s", language, len(problem_text), len(solution.get("code", "")))
-    raw = runtime.generate(tests_prompt(problem_text, language, solution), max_new_tokens=2048, json_mode=True)
+    raw = runtime.generate(tests_prompt(problem_text, language, solution), max_new_tokens=4096, json_mode=True)
     try:
         data = _parse_test_payload(raw)
     except ValueError:
@@ -88,7 +88,7 @@ def _normalize_multiple_answer_tests(problem_text: str, tests: list[dict[str, st
             removed_count,
             len(normalized),
         )
-    return normalized[:8]
+    return normalized
 
 
 def _is_frequency_sort_problem(problem_text: str) -> bool:

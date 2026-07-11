@@ -9,14 +9,20 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 
-def verify_code(language: str, code: str, tests: list[dict[str, str]]) -> dict[str, object]:
+def verify_code(
+    language: str,
+    code: str,
+    tests: list[dict[str, str | None]],
+    timeout_seconds: int = 5,
+    memory_mb: int = 256,
+) -> dict[str, object]:
     settings = get_settings()
     payload = {
         "language": language,
         "code": code,
         "tests": [{"input": test["input"], "expected_output": test.get("expected_output")} for test in tests],
-        "timeout_seconds": 5,
-        "memory_mb": 256,
+        "timeout_seconds": timeout_seconds,
+        "memory_mb": memory_mb,
     }
     try:
         started = time.perf_counter()

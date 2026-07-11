@@ -169,7 +169,7 @@ function parseDeck(markdown) {
   if (!slides.length) {
     return [{ title: "Study Buddy Slides", bullets: ["No slide content was generated."], code: "", table: [], raw: "" }];
   }
-  return slides.slice(0, 6);
+  return slides.slice(0, 12);
 }
 
 function slideKind(slide, index) {

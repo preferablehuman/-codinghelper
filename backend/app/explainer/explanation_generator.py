@@ -12,7 +12,7 @@ def build_explanation(
     runtime: BaseModelRuntime,
     problem_summary: str,
     pattern: str,
-    solution: dict[str, str],
+    solution: dict[str, object],
     evidence: str,
     verification: dict[str, object],
 ) -> dict[str, str]:
@@ -28,7 +28,7 @@ def build_explanation(
         json_mode=True,
     )
     try:
-        data = parse_json_object(raw)
+        data = parse_json_object(raw, wrapper_keys=("explanation", "result", "data"))
     except ValueError:
         logger.error("Explanation JSON parse failed response_preview=%s", response_preview(raw))
         raise
@@ -44,10 +44,10 @@ def build_explanation(
     result = {
         "intuition": field("intuition", "Use the selected pattern to organize the important state and avoid brute force work."),
         "brute_force": field("brute_force", "A direct brute-force approach checks candidates without reusing prior work."),
-        "optimized_approach": field("optimized_approach", solution.get("explanation", "Use the generated solution approach.")),
+        "optimized_approach": field("optimized_approach", str(solution.get("explanation", "Use the generated solution approach."))),
         "dry_run": field("dry_run", "Walk through the sample input while tracking the key state changes."),
         "pitfalls": field("pitfalls", "Watch input parsing, boundary cases, and duplicate or missing values."),
-        "complexity_analysis": field("complexity_analysis", solution.get("time_complexity", "See solution complexity.")),
+        "complexity_analysis": field("complexity_analysis", str(solution.get("time_complexity", "See solution complexity."))),
     }
     if defaults_used:
         logger.warning("Explanation payload missing optional fields; defaults used fields=%s", defaults_used)

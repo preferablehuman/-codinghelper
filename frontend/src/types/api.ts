@@ -25,6 +25,23 @@ export interface JobCreated {
   status: JobStatus;
 }
 
+export interface HealthResponse {
+  status: string;
+  service: string;
+  database: string;
+  model_provider: string;
+  model_gateway?: string;
+  model: {
+    loaded?: boolean;
+    provider?: string;
+    model?: string;
+    display_name?: string | null;
+    remote?: boolean;
+    gateway_status?: string;
+    error?: string | null;
+  };
+}
+
 export interface JobStatusResponse {
   job_id: string;
   status: JobStatus;
@@ -91,6 +108,35 @@ export interface VerificationRun {
   memory_used_mb: number | null;
   passed_count: number;
   failed_count: number;
+}
+
+export interface ExecutionRequest {
+  language: string;
+  code: string;
+  input: string;
+  expected_output: string | null;
+  tests?: Array<{
+    input: string;
+    expected_output: string | null;
+  }>;
+  timeout_seconds?: number;
+  memory_mb?: number;
+}
+
+export interface ExecutionResultItem {
+  test_index: number;
+  status: string;
+  stdout: string;
+  stderr: string;
+  execution_time_ms: number;
+}
+
+export interface ExecutionResponse {
+  status: string;
+  passed_count: number;
+  failed_count: number;
+  results: ExecutionResultItem[];
+  average_execution_time_ms: number | null;
 }
 
 export interface Explanation {

@@ -6,6 +6,7 @@ from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
+from app.api.routes_execute import router as execute_router
 from app.api.routes_health import router as health_router
 from app.api.routes_jobs import router as jobs_router
 from app.api.routes_result_parts import router as result_parts_router
@@ -33,6 +34,7 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(jobs_router)
 app.include_router(result_parts_router)
+app.include_router(execute_router)
 
 
 @app.middleware("http")
@@ -60,21 +62,9 @@ async def log_requests(request: Request, call_next):
 def log_startup() -> None:
     settings = get_settings()
     logger.info(
-        (
-            "Backend service startup started env=%s provider=%s model=%s model_lazy_load=%s "
-            "ollama_base_url=%s ollama_num_ctx=%s ollama_require_gpu=%s "
-            "require_cuda=%s allow_cpu_offload=%s allow_disk_offload=%s"
-        ),
+        "Backend service startup started env=%s model_gateway_url=%s",
         settings.app_env,
-        settings.model_provider,
-        settings.model_name_or_path,
-        settings.model_lazy_load,
-        settings.ollama_base_url,
-        settings.ollama_num_ctx,
-        settings.ollama_require_gpu,
-        settings.model_require_cuda,
-        settings.model_allow_cpu_offload,
-        settings.model_allow_disk_offload,
+        settings.model_gateway_url,
     )
     recover_interrupted_jobs()
     initialize_model_runtime()
@@ -83,24 +73,20 @@ def log_startup() -> None:
 
 def initialize_model_runtime() -> None:
     settings = get_settings()
-    if settings.model_lazy_load:
-        logger.warning(
-            "MODEL_LAZY_LOAD=true is configured, but startup preload is required; loading model during startup anyway."
-        )
     started = time.perf_counter()
-    logger.info("Startup model preload started provider=%s model=%s", settings.model_provider, settings.model_name_or_path)
+    logger.info("Startup model gateway check started base_url=%s", settings.model_gateway_url)
     try:
         runtime = get_model_runtime()
         runtime.load()
         elapsed_ms = int((time.perf_counter() - started) * 1000)
-        logger.info("Startup model preload completed elapsed_ms=%s status=%s", elapsed_ms, runtime.status())
-    except Exception:
+        logger.info("Startup model gateway check completed elapsed_ms=%s status=%s", elapsed_ms, runtime.status())
+    except Exception as exc:
         elapsed_ms = int((time.perf_counter() - started) * 1000)
-        logger.exception(
-            "Startup model preload failed elapsed_ms=%s; backend startup is stopped so jobs cannot run on an unverified model",
+        logger.warning(
+            "Model gateway is unavailable or degraded elapsed_ms=%s error=%s; backend remains available",
             elapsed_ms,
+            exc,
         )
-        raise
 
 
 def recover_interrupted_jobs() -> None:

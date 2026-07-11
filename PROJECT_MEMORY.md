@@ -16,23 +16,24 @@ Every session should start by reading this file and should end by updating it.
 
 ## Target Architecture
 
-Seven local Docker Compose services:
+Seven default Docker Compose services plus one optional local-model service:
 
 1. `frontend` - React + Vite + TypeScript UI
-2. `backend` - FastAPI orchestration, RAG, model-runtime client
-3. `ollama` - local GGUF model server with GPU access
+2. `backend` - provider-neutral FastAPI orchestration and RAG
+3. `model-gateway` - internal provider adapter API for health and generation
 4. `postgres` - relational application state
 5. `qdrant` - vector storage for source chunks
 6. `sandbox-runner` - isolated generated-code execution
 7. `slide-renderer` - markdown, HTML preview, and PPTX deck export service
+8. `ollama` (optional) - local GGUF model server when selected by the gateway
 
-Core rule: PostgreSQL stores application state. Qdrant stores embeddings. The backend orchestrates everything. The sandbox runs generated code. The slide renderer handles deck artifacts.
+Core rule: PostgreSQL stores application state. Qdrant stores embeddings. The backend orchestrates jobs through a stable model-gateway contract and has no provider-specific dependencies. The sandbox runs generated code. The slide renderer handles deck artifacts.
 
 ## Current Status
 
-- Status: Initial MVP scaffold completed; active generation now uses Ollama with `qwen2.5-coder:7b` (`Q4_K_M`, about 4.7 GB) instead of the oversized Qwen3 Transformers download. Detailed rotating file and console logging is available across the Compose stack, backend startup is gated on Ollama warmup plus nonzero VRAM residency, and slide generation now writes real PowerPoint `.pptx` decks as well as HTML previews. Backend startup currently verifies the Ollama model at `8192` context with nonzero VRAM residency.
-- Last updated: 2026-07-04
-- Current milestone: Phase 1 to Phase 5 skeleton, with Ollama-backed local model runtime wiring for the target 32 GB RAM / 12 GB VRAM machine.
+- Status: MVP scaffold completed with a provider-neutral internal model gateway. The backend remains available when the configured LLM is degraded, and the frontend uses a same-origin `/api` proxy. Gemini is selected in the current local environment; its configured auth key currently receives Google `401 ACCESS_TOKEN_TYPE_UNSUPPORTED`, so model generation remains degraded until that external credential is repaired or replaced.
+- Last updated: 2026-07-11
+- Current milestone: Phase 1 to Phase 5 application with modular LLM routing, multi-solution generation, verification, and modern learning UI.
 
 ## Completed Work
 
@@ -199,11 +200,13 @@ Core rule: PostgreSQL stores application state. Qdrant stores embeddings. The ba
 - Verify mounted-code reload behavior once Docker Desktop is running.
 - Run a first full job after the Ollama model is pulled into `data/ollama`, then tune `OLLAMA_NUM_CTX`, generation token limits, and repair attempts based on actual latency and VRAM use.
 - Consider moving long-running jobs out of FastAPI in-process background tasks if restart-resumability becomes required.
+- Replace or repair the current Gemini auth key, which Google rejects with `401 ACCESS_TOKEN_TYPE_UNSUPPORTED`, then run one end-to-end online job.
 
 ## Design Decisions
 
 - Use Docker Compose only for v1.
 - Use a modular monolith backend instead of splitting internal RAG/generation services.
+- Keep provider orchestration outside the application backend. All generation crosses the model-gateway `/health` and `/generate` API; provider changes are gateway-only configuration/adapter work.
 - Preload the configured generation model during backend startup. Local containers should not report backend startup complete until the configured model is loaded/warmed or has failed loudly.
 - Use adapter-first retrieval and avoid paid search APIs or external LLM APIs.
 - Use Ollama as the active local model-serving path because it directly supports the desired `Q4_K_M` quantized coder model. Keep Hugging Face Transformers runtime files available but unused by default.
@@ -351,3 +354,60 @@ logs/slide-renderer
   - Test parsing now tolerates a single JSON test object in addition to a bare array or wrapped `tests` / `test_cases` / `cases` array.
   - Frequency-sort tests are post-processed for multiple-valid-output cases: ambiguous tie outputs get `expected_output=null`, and no-tie control cases are added to keep verification meaningful.
   - Final rerun completed with verification `PASSED`, 4 passed and 0 failed, then generated explanation and slide artifacts successfully. Backend and sandbox log tails showed no fresh errors after completion.
+- UI coding-workspace update on 2026-07-04:
+  - Main app shell now uses a compact coding-assistant theme with a dark top bar, terminal/code accents, emerald focus states, and a subtle grid background.
+  - New problem form defaults to Java, removes the obsolete user URL/source URL input, and sends `source_urls: []`.
+  - Backend `JobCreate` default language is now Java.
+  - Result page tabs moved from the top row into a left analysis rail with icon tabs for explanation, code, tests, sources, dry run, and slides.
+  - Code tab is now an editable Monaco workspace with reset, custom stdin, optional exact expected output, and a run button.
+  - Added backend `POST /api/execute` as a browser-facing sandbox proxy. It supports Java/Python, custom stdin, optional expected output, timeout, and memory limits.
+  - Code execution smoke test through backend passed with Java: `PASSED`, 1 passed, 0 failed.
+  - Frontend TypeScript validation passed by temporarily junctioning `frontend/node_modules` to `data/frontend/node_modules` and removing the junction afterward.
+  - Vite production build could not be completed on the Windows host because `data/frontend/node_modules` is container-installed and lacks Rollup's Windows optional native package. The dev frontend still responded with HTTP 200 at `http://localhost:5173`.
+- Modern UI and learning-ladder update on 2026-07-04:
+  - App shell now has persistent light/dark mode, a wider `max-w-[1760px]` workspace, fade/rise animations, dark-mode global markdown styles, and larger readable form/result surfaces.
+  - Result page now shows job summary metrics for approach count, test count, and detected pattern, while retaining the left analysis rail.
+  - Backend solution generation now requests a three-step approach ladder: `BRUTE_FORCE`, `IMPROVED`, and `OPTIMAL`. All generated variants are stored as `GeneratedSolution` rows, and the optimal/expected/final solution is selected for verification.
+  - Code tab now accepts all stored solutions, sorts them as an implementation ladder, lets users switch between variants, and keeps the active variant editable/runnable with custom stdin and optional expected output.
+  - Dry-run tab now combines approach buildup, optimal pseudocode/logic stub, execution trace markdown, step guidance, and pitfalls. New explanation prompts require a code-logic stub, step table, state changes, and main decision point.
+  - Test generation now recommends at least 10 meaningful cases when possible and removes the previous maximum cap. The frontend test panel displays the recommended minimum and allows any number of generated cases.
+  - Slide prompts now require an eight-slide learner deck covering approach ladder, brute force, improved, optimal, dry-run visualization, code trace, complexity, tests, and pitfalls. The slide renderer no longer truncates decks to six slides and now allows up to twelve parsed slides.
+  - Frontend, backend, and slide-renderer services were restarted with `docker compose restart frontend backend slide-renderer` so mounted code changes were loaded by the live app.
+  - Validation passed: backend `py_compile`, `node --check slide-renderer/server.js`, frontend `tsc --noEmit`, backend health, slide-renderer health, and frontend HTTP 200.
+  - Browser visual verification passed on the live result/code workspace in light and dark mode with no horizontal overflow. Existing old jobs only show one `Verified solution`; newly generated jobs should show the full three-approach ladder.
+  - Vite production build is still blocked on the Windows host by the existing container-installed `data/frontend/node_modules` missing `@rollup/rollup-win32-x64-msvc`; this is the same Rollup optional dependency issue as before.
+- Explanation consolidation, test-suite execution, and retrieval update on 2026-07-04:
+  - Removed `Dry run` and `Slides` from the result navigation. The `Explanation` workspace now owns solution selection, reasoning, dry-run/code logic, GFG-style illustration cards, proof-run execution, pitfalls, complexity, SVG illustration download, PPTX download, and HTML preview links.
+  - The Code tab and Tests tab now support executing the full generated test suite through the existing backend execute API. The response includes per-test results and `average_execution_time_ms`.
+  - Backend `POST /api/execute` now accepts either a single custom input or a `tests` array. Stored verification runs now save average execution time instead of always storing zero.
+  - Solution generation now asks for at least `BRUTE_FORCE` and `OPTIMAL`, with `IMPROVED` only when meaningfully different. Backend post-processing drops duplicate/similar variants by comparing normalized code and complexity.
+  - Explanation prompts now require per-approach dry-run sections and GFG-style illustration tables with concrete state changes. Slide prompts now require an approach comparison table and concrete illustration/dry-run content.
+  - Retrieval now queries local Qdrant RAG first, converts high-confidence local hits into reusable sources, then enriches with approved fetched/curated sources up to a balanced target. Stack problems now include the GFG balanced-parentheses article as a curated source candidate.
+  - Validation passed: backend `py_compile`, slide-renderer `node --check`, frontend `tsc --noEmit`, backend health, slide-renderer health, frontend HTTP 200, and live `/api/execute` multi-test Java smoke returned `PASSED` with average runtime.
+  - Browser visual check passed on the consolidated Explanation page: only Explanation/Code/Tests/Sources remain in the rail, download controls are visible, and the page has no horizontal overflow.
+- Multi-solution reliability, Gemini routing, and home UI revamp on 2026-07-11:
+  - Root cause of one-solution jobs was the combined approach request: a truncated or partially valid JSON response was accepted as long as it contained one usable variant.
+  - Solution generation now makes independent structured model requests for `BRUTE_FORCE`, `IMPROVED`, and `OPTIMAL`. Brute force and optimal are required; the intermediate approach may be omitted only if it is invalid or deduplicates as algorithmically equivalent.
+  - Added focused tests proving three independent requests are made and proving an invalid optional intermediate response still returns the required brute-force/optimal pair.
+  - Added a server-side Gemini REST runtime selected with `MODEL_PROVIDER=gemini`. It verifies the configured model, uses `x-goog-api-key`, supports JSON response mode, retries transient quota/server/network failures, logs token usage, and never returns the key in status data.
+  - Added `GEMINI_API_KEY`, `GEMINI_BASE_URL`, `GEMINI_MODEL`, timeout, and retry settings. The stable default is `gemini-2.5-flash`; `.env.example` and README document setup and the no-Ollama Compose command.
+  - Removed the backend's hard Compose dependency on Ollama so the online service set can start without pulling or warming a local model. Ollama remains the default provider and continues to work when its service is started.
+  - Rebuilt the input experience with a product-specific hero, clearer form hierarchy, terminal-style problem editor, character count, keyboard submission, language cards, difficulty controls, stronger responsive layout, and live backend runtime/key-route status.
+  - Validation passed: all 48 backend Python files parsed, frontend TypeScript completed with no errors using the existing container dependency cache, slide-renderer JavaScript syntax passed, solution-variant tests passed, `docker compose config --quiet` passed, and `git diff --check` passed.
+  - Full container and live API checks were not available because the Docker Desktop engine pipe was absent. No Gemini key was present, so no external quota-consuming generation request was attempted.
+- Provider-neutral model gateway and fetch-failure repair on 2026-07-11:
+  - Verified the browser failure was caused by an explicit mismatch: the backend still selected Ollama while the Ollama Compose service was disabled. Strict backend model preload prevented FastAPI from becoming a reliable application API.
+  - Added an independent `model-gateway` FastAPI service with a stable internal `GET /health` and `POST /generate` contract. Gemini and Ollama adapters, credentials, model names, retry logic, and provider HTTP formats now live exclusively behind this boundary.
+  - Replaced active backend provider selection with `ModelGatewayRuntime`. Backend configuration now contains only gateway URL/timeouts; active backend, pipeline, API, and frontend code contain no Gemini/Ollama branching.
+  - Backend startup now tolerates a degraded or unreachable model gateway. Database/history/UI APIs remain reachable, `/api/health` reports model readiness, and generation failures become explicit provider errors instead of browser `Failed to fetch` failures.
+  - Changed the frontend to same-origin `/api` requests and added a Vite container proxy to `backend:8000`, removing browser coupling to hard-coded `localhost:8000`. Added a clear API-unavailable message and generic provider/gateway status UI.
+  - The model gateway is available only on the Compose network (`expose`, not a host port), so the provider key cannot be consumed through an unauthenticated host endpoint.
+  - Updated `.env.example` to the generic `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, `LLM_BASE_URL`, temperature, timeout, and retry contract. Changing providers no longer requires application changes.
+  - Live validation passed: rebuilt and started gateway/backend/frontend; backend database health is `ok`; frontend `http://localhost:5173/api/health` successfully proxies to the backend; focused gateway/solution tests report 4 passed; frontend and Vite TypeScript checks pass; gateway source parses; Compose config passes.
+  - Live Gemini verification reached Google but the configured 106-character `AQ.` auth key returned `401 UNAUTHENTICATED` with `ACCESS_TOKEN_TYPE_UNSUPPORTED` on both model verification and the recommended Interactions endpoint. The gateway now reports a safe actionable authentication error while keeping the application operational. The credential value was never logged or exposed.
+- Backend database-startup race repair on 2026-07-11:
+  - Reproduced a misleading `Up` backend container whose Uvicorn reload parent survived while the application child exited. PostgreSQL was still recovering, causing both Alembic and `recover_interrupted_jobs()` to receive connection-refused / database-starting errors.
+  - Added `app.db.readiness`, which retries a real SQL query for up to 120 seconds before migrations run.
+  - Changed `scripts/run-backend.sh` to `set -eu`, run the database readiness gate first, and stop immediately if readiness or migrations fail.
+  - Added a backend HTTP healthcheck and changed frontend Compose dependency from `service_started` to `service_healthy`, preventing the UI from starting against a non-serving reload parent.
+  - Recreated the services and verified the corrected order in live logs: database readiness passed, Alembic completed, application startup completed, backend became Docker `healthy`, and `http://localhost:5173/api/health` returned API/database `ok`.

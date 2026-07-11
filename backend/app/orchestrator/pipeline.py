@@ -28,10 +28,10 @@ from app.rag.chunker import chunk_text
 from app.rag.embeddings import embed_texts
 from app.rag.evidence_builder import build_claims
 from app.rag.qdrant_store import QdrantStore
-from app.retrieval.source_registry import retrieve_sources
+from app.retrieval.source_registry import RetrievedSource, retrieve_sources
 from app.slides.slide_markdown_generator import build_slide_markdown
 from app.slides.slide_renderer_client import render_slides
-from app.solver.code_generator import generate_solution, repair_solution
+from app.solver.code_generator import generate_solution_variants, repair_solution, select_primary_solution
 from app.solver.problem_analyzer import analyze_problem
 from app.solver.test_generator import generate_tests
 from app.verifier.sandbox_client import verify_code
@@ -64,7 +64,47 @@ def _verification_passed(verification: dict[str, object]) -> bool:
     return str(verification.get("status", "")).upper() == "PASSED" and int(verification.get("failed_count", 0)) == 0
 
 
+def _local_rag_query(problem_summary: str, selected_pattern: str, candidate_patterns: list[str], problem_text: str) -> str:
+    return "\n".join(
+        [
+            problem_summary,
+            f"Selected pattern: {selected_pattern}",
+            f"Candidate patterns: {', '.join(candidate_patterns)}",
+            problem_text[:1200],
+        ]
+    )
+
+
+def _local_rag_sources(results: list[dict[str, object]]) -> list[RetrievedSource]:
+    sources: list[RetrievedSource] = []
+    for result in results:
+        payload = result.get("payload", {})
+        if not isinstance(payload, dict):
+            continue
+        title = str(payload.get("title") or "Local RAG source")
+        url = str(payload.get("url") or f"local-rag://{result.get('id', 'chunk')}")
+        text = str(payload.get("text_preview") or "")
+        if not text.strip():
+            continue
+        sources.append(
+            RetrievedSource(
+                title=f"Local RAG: {title}",
+                url=url,
+                source_name=str(payload.get("source_name") or "local_rag"),
+                source_tier=int(payload.get("source_tier") or 2),
+                text=text,
+                retrieval_method="local_rag_reuse",
+                is_cache_allowed=True,
+                license_note=f"Reused from local vector store; score={float(result.get('score', 0.0)):.2f}",
+            )
+        )
+    return sources
+
+
 def _store_verification(db, job_id: str, solution_id: str, verification: dict[str, object]) -> None:
+    result_items = [item for item in verification.get("results", []) if isinstance(item, dict)]
+    execution_times = [int(item.get("execution_time_ms", 0)) for item in result_items if item.get("execution_time_ms") is not None]
+    average_execution_time_ms = int(sum(execution_times) / len(execution_times)) if execution_times else 0
     db.add(
         VerificationRun(
             job_id=job_id,
@@ -72,7 +112,7 @@ def _store_verification(db, job_id: str, solution_id: str, verification: dict[st
             status=str(verification.get("status", "INTERNAL_ERROR")),
             stdout=json.dumps(verification.get("results", [])),
             stderr=str(verification.get("stderr", "")),
-            execution_time_ms=0,
+            execution_time_ms=average_execution_time_ms,
             memory_used_mb=None,
             passed_count=int(verification.get("passed_count", 0)),
             failed_count=int(verification.get("failed_count", 0)),
@@ -121,11 +161,21 @@ def run_job_pipeline(job_id: str) -> None:
 
             set_job_status(db, job, JobStatus.RETRIEVING_SOURCES)
             source_urls = json.loads(job.source_urls_json or "[]")
-            retrieved_sources = retrieve_sources(job.problem_text, analysis.candidate_patterns, source_urls)
+            local_query = _local_rag_query(analysis.summary, analysis.selected_pattern, analysis.candidate_patterns, job.problem_text)
+            local_query_vectors = embed_texts(
+                [local_query],
+                settings.embedding_model_name,
+                allow_remote_download=settings.embedding_allow_remote_download,
+                cache_dir=settings.embedding_cache_dir,
+            )
+            local_results = QdrantStore().search_chunks(local_query_vectors[0] if local_query_vectors else [], limit=5, score_threshold=0.62)
+            local_sources = _local_rag_sources(local_results)
+            retrieved_sources = retrieve_sources(job.problem_text, analysis.candidate_patterns, source_urls, local_sources=local_sources)
             logger.info(
-                "Retrieved sources job_id=%s requested_url_count=%s retrieved_count=%s",
+                "Retrieved sources job_id=%s requested_url_count=%s local_count=%s retrieved_count=%s",
                 job.id,
                 len(source_urls),
+                len(local_sources),
                 len(retrieved_sources),
             )
             source_rows: list[SourceDocument] = []
@@ -201,20 +251,29 @@ def run_job_pipeline(job_id: str) -> None:
             )
 
             set_job_status(db, job, JobStatus.GENERATING_SOLUTION)
-            solution_data = generate_solution(runtime, job.language, job.problem_text, analysis.selected_pattern, evidence_text)
-            solution = GeneratedSolution(job_id=job.id, **solution_data)
-            db.add(solution)
+            solution_variants = generate_solution_variants(runtime, job.language, job.problem_text, analysis.selected_pattern, evidence_text)
+            solution_rows: list[GeneratedSolution] = []
+            for variant in solution_variants:
+                row = GeneratedSolution(job_id=job.id, **variant)
+                db.add(row)
+                solution_rows.append(row)
             db.commit()
-            db.refresh(solution)
+            for row in solution_rows:
+                db.refresh(row)
+            solution_data = select_primary_solution(solution_variants)
+            primary_index = solution_variants.index(solution_data)
+            solution = solution_rows[primary_index]
             logger.info(
-                "Generated solution job_id=%s solution_id=%s code_chars=%s pattern=%s",
+                "Generated solution variants job_id=%s primary_solution_id=%s variant_count=%s code_chars=%s pattern=%s",
                 job.id,
                 solution.id,
+                len(solution_variants),
                 len(solution.code),
                 solution.algorithm_pattern,
             )
 
             set_job_status(db, job, JobStatus.GENERATING_TESTS)
+            solution_context: dict[str, object] = {**solution_data, "approach_ladder": solution_variants}
             tests = generate_tests(runtime, job.problem_text, job.language, solution_data)
             for test in tests:
                 db.add(
@@ -257,6 +316,7 @@ def run_job_pipeline(job_id: str) -> None:
                 db.add(solution)
                 db.commit()
                 db.refresh(solution)
+                solution_context = {**solution_data, "approach_ladder": [*solution_variants, solution_data]}
 
                 set_job_status(db, job, JobStatus.VERIFYING)
                 verification = verify_code(job.language, solution.code, tests)
@@ -270,7 +330,7 @@ def run_job_pipeline(job_id: str) -> None:
                 )
 
             set_job_status(db, job, JobStatus.GENERATING_EXPLANATION)
-            explanation_data = build_explanation(runtime, analysis.summary, analysis.selected_pattern, solution_data, evidence_text, verification)
+            explanation_data = build_explanation(runtime, analysis.summary, analysis.selected_pattern, solution_context, evidence_text, verification)
             db.add(Explanation(job_id=job.id, **explanation_data))
             db.commit()
             logger.info("Generated explanation job_id=%s", job.id)
@@ -282,7 +342,7 @@ def run_job_pipeline(job_id: str) -> None:
                 job.title or "Programming Problem",
                 analysis.summary,
                 analysis.selected_pattern,
-                solution_data,
+                solution_context,
                 explanation_data,
                 source_dicts,
             )

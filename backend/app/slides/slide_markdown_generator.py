@@ -12,7 +12,7 @@ def build_slide_markdown(
     title: str,
     problem_summary: str,
     pattern: str,
-    solution: dict[str, str],
+    solution: dict[str, object],
     explanation: dict[str, str],
     sources: list[dict[str, str]],
 ) -> str:

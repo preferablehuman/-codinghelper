@@ -5,7 +5,22 @@
 html,
 body {
   min-height: 100%;
-  background: #f8fafc;
+}
+
+body {
+  background:
+    linear-gradient(rgba(24, 24, 27, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(24, 24, 27, 0.04) 1px, transparent 1px),
+    #f4f5f0;
+  background-size: 28px 28px;
+}
+
+.dark body {
+  background:
+    linear-gradient(rgba(244, 244, 245, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(244, 244, 245, 0.045) 1px, transparent 1px),
+    #09090b;
+  background-size: 28px 28px;
 }
 
 button,
@@ -16,6 +31,132 @@ select {
 }
 
 .focus-ring {
-  @apply focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2;
+  @apply focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-zinc-950;
 }
 
+@layer components {
+  .markdown-body {
+    @apply max-w-none break-words text-sm leading-7 text-zinc-700 dark:text-zinc-300;
+    overflow-wrap: anywhere;
+  }
+
+  .markdown-body h1,
+  .markdown-body h2,
+  .markdown-body h3,
+  .markdown-body h4 {
+    @apply mt-5 font-semibold text-zinc-950 dark:text-white;
+  }
+
+  .markdown-body h1 {
+    @apply text-2xl;
+  }
+
+  .markdown-body h2 {
+    @apply text-xl;
+  }
+
+  .markdown-body h3 {
+    @apply text-lg;
+  }
+
+  .markdown-body p {
+    @apply my-3;
+  }
+
+  .markdown-body ul,
+  .markdown-body ol {
+    @apply my-3 pl-5;
+  }
+
+  .markdown-body ul {
+    @apply list-disc;
+  }
+
+  .markdown-body ol {
+    @apply list-decimal;
+  }
+
+  .markdown-body li {
+    @apply my-1;
+  }
+
+  .markdown-body code {
+    @apply rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-xs text-zinc-950 dark:bg-zinc-800 dark:text-zinc-100;
+  }
+
+  .markdown-body pre {
+    @apply my-4 max-h-[520px] overflow-auto rounded-md bg-zinc-950 p-4 text-zinc-100 shadow-inner shadow-black/20;
+  }
+
+  .markdown-body pre code {
+    @apply bg-transparent p-0 text-zinc-100;
+  }
+
+  .markdown-body table {
+    @apply my-4 w-full border-collapse overflow-hidden rounded-md text-left text-xs;
+  }
+
+  .markdown-body th {
+    @apply border border-zinc-200 bg-zinc-100 px-3 py-2 font-semibold text-zinc-950 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100;
+  }
+
+  .markdown-body td {
+    @apply border border-zinc-200 px-3 py-2 align-top dark:border-zinc-800;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes soft-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fade-in 240ms ease-out both;
+  }
+
+  .animate-rise-in {
+    animation: rise-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .animate-soft-pulse {
+    animation: soft-pulse 2.2s ease-in-out infinite;
+  }
+
+  .page-shell {
+    @apply mx-auto w-full max-w-[1760px] px-4 py-6 sm:px-6 lg:px-8;
+  }
+
+  .surface {
+    @apply rounded-lg border border-zinc-200 bg-white shadow-sm transition-colors duration-300 dark:border-zinc-800 dark:bg-zinc-950;
+  }
+
+  .surface-soft {
+    @apply rounded-lg border border-zinc-200 bg-zinc-50 shadow-sm transition-colors duration-300 dark:border-zinc-800 dark:bg-zinc-900;
+  }
+}

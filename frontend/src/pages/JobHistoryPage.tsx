@@ -32,65 +32,65 @@ export default function JobHistoryPage() {
   }
 
   return (
-    <section>
-      <div className="mb-4 flex items-center justify-between">
+    <section className="animate-rise-in">
+      <div className="mb-5 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Job History</h1>
-          <p className="text-sm text-slate-500">Past explanations and verification runs.</p>
+          <h1 className="text-2xl font-semibold text-zinc-950 dark:text-white">Job History</h1>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Past explanations and verification runs.</p>
         </div>
         <button
           type="button"
           onClick={() => void loadJobs()}
-          className="focus-ring inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 hover:bg-slate-100"
+          className="focus-ring inline-flex h-10 items-center gap-2 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-900"
         >
           <RefreshCw size={16} aria-hidden="true" />
           Refresh
         </button>
       </div>
-      {error ? <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
-      <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-100 text-left text-xs uppercase tracking-wide text-slate-500">
+      {error ? <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">{error}</p> : null}
+      <div className="surface overflow-hidden">
+        <table className="min-w-full divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
+          <thead className="bg-zinc-100 text-left text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
             <tr>
-              <th className="px-4 py-3">Problem</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Language</th>
-              <th className="px-4 py-3">Pattern</th>
-              <th className="px-4 py-3">Created</th>
-              <th className="px-4 py-3 text-right">Actions</th>
+              <th className="px-5 py-3">Problem</th>
+              <th className="px-5 py-3">Status</th>
+              <th className="px-5 py-3">Language</th>
+              <th className="px-5 py-3">Pattern</th>
+              <th className="px-5 py-3">Created</th>
+              <th className="px-5 py-3 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {loading ? (
               <tr>
-                <td className="px-4 py-8 text-center text-slate-500" colSpan={6}>
+                <td className="px-5 py-8 text-center text-zinc-500 dark:text-zinc-400" colSpan={6}>
                   Loading jobs...
                 </td>
               </tr>
             ) : jobs.length === 0 ? (
               <tr>
-                <td className="px-4 py-8 text-center text-slate-500" colSpan={6}>
+                <td className="px-5 py-8 text-center text-zinc-500 dark:text-zinc-400" colSpan={6}>
                   No jobs yet.
                 </td>
               </tr>
             ) : (
               jobs.map((job) => (
-                <tr key={job.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3">
-                    <Link to={`/jobs/${job.id}`} className="font-medium text-teal-700 hover:text-teal-900">
+                <tr key={job.id} className="transition hover:bg-zinc-50 dark:hover:bg-zinc-900">
+                  <td className="px-5 py-4">
+                    <Link to={`/jobs/${job.id}`} className="font-medium text-emerald-700 hover:text-emerald-900 dark:text-emerald-300 dark:hover:text-emerald-200">
                       {job.title || "Untitled problem"}
                     </Link>
-                    <p className="text-xs text-slate-500">{job.current_step}</p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">{job.current_step}</p>
                   </td>
-                  <td className="px-4 py-3">{job.status}</td>
-                  <td className="px-4 py-3">{job.language}</td>
-                  <td className="px-4 py-3">{job.detected_pattern || "-"}</td>
-                  <td className="px-4 py-3">{new Date(job.created_at).toLocaleString()}</td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-5 py-4 text-zinc-700 dark:text-zinc-300">{job.status}</td>
+                  <td className="px-5 py-4 text-zinc-700 dark:text-zinc-300">{job.language}</td>
+                  <td className="px-5 py-4 text-zinc-700 dark:text-zinc-300">{job.detected_pattern || "-"}</td>
+                  <td className="px-5 py-4 text-zinc-700 dark:text-zinc-300">{new Date(job.created_at).toLocaleString()}</td>
+                  <td className="px-5 py-4 text-right">
                     <button
                       type="button"
                       onClick={() => void handleDelete(job.id)}
-                      className="focus-ring inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-slate-600 hover:bg-red-50 hover:text-red-700"
+                      className="focus-ring inline-flex h-9 w-9 items-center justify-center rounded-md border border-zinc-300 text-zinc-600 transition hover:bg-red-50 hover:text-red-700 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-red-950/40 dark:hover:text-red-200"
                       title="Delete job"
                     >
                       <Trash2 size={15} aria-hidden="true" />
@@ -105,4 +105,3 @@ export default function JobHistoryPage() {
     </section>
   );
 }
-

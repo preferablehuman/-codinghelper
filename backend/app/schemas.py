@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class JobCreate(BaseModel):
     title: str | None = None
     problem_text: str = Field(min_length=10)
-    language: str = "python"
+    language: str = "java"
     difficulty: str | None = None
     source_urls: list[str] = Field(default_factory=list)
 
@@ -143,3 +143,25 @@ class JobDetail(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+class CodeExecutionTest(BaseModel):
+    input: str = ""
+    expected_output: str | None = None
+
+
+class CodeExecutionRequest(BaseModel):
+    language: str = "java"
+    code: str = Field(min_length=1)
+    input: str = ""
+    expected_output: str | None = None
+    tests: list[CodeExecutionTest] | None = None
+    timeout_seconds: int = Field(default=5, ge=1, le=10)
+    memory_mb: int = Field(default=256, ge=64, le=1024)
+
+
+class CodeExecutionResponse(BaseModel):
+    status: str
+    passed_count: int
+    failed_count: int
+    results: list[dict[str, object]] = Field(default_factory=list)
+    average_execution_time_ms: float | None = None

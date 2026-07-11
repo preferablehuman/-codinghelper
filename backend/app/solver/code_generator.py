@@ -1,12 +1,14 @@
 import logging
 import re
+from difflib import SequenceMatcher
 
 from app.model_runtime.base import BaseModelRuntime
 from app.model_runtime.json_utils import optional_string, parse_json_object, require_string, response_preview
-from app.model_runtime.prompts import repair_prompt, solution_prompt
+from app.model_runtime.prompts import repair_prompt, solution_prompt, solution_variant_prompt
 
 
 logger = logging.getLogger(__name__)
+APPROACH_ORDER = {"BRUTE_FORCE": 0, "IMPROVED": 1, "AVERAGE": 1, "OPTIMAL": 2, "EXPECTED": 2, "FINAL": 2}
 
 
 def generate_solution(
@@ -30,6 +32,67 @@ def generate_solution(
         raise
     logger.info("Solution payload parsed code_chars=%s explanation_chars=%s", len(result["code"]), len(result["explanation"]))
     return result
+
+
+def generate_solution_variants(
+    runtime: BaseModelRuntime,
+    language: str,
+    problem_text: str,
+    pattern: str,
+    evidence: str,
+) -> list[dict[str, str]]:
+    logger.info(
+        "Generating solution variants language=%s pattern=%s problem_chars=%s evidence_chars=%s",
+        language,
+        pattern,
+        len(problem_text),
+        len(evidence),
+    )
+    variants: list[dict[str, str]] = []
+    for approach_type in ("BRUTE_FORCE", "IMPROVED", "OPTIMAL"):
+        prompt = solution_variant_prompt(
+            problem_text,
+            language,
+            pattern,
+            evidence,
+            approach_type,
+            variants,
+        )
+        raw = ""
+        try:
+            raw = runtime.generate(prompt, max_new_tokens=4096, json_mode=True)
+            item = parse_json_object(raw)
+            normalized = _normalize_solution_payload(item, pattern, language=language)
+            normalized["approach_type"] = approach_type
+            variants.append(normalized)
+        except ValueError as exc:
+            if approach_type == "IMPROVED":
+                logger.warning(
+                    "Skipping invalid optional solution variant approach_type=%s error=%s response_preview=%s",
+                    approach_type,
+                    exc,
+                    response_preview(raw),
+                )
+                continue
+            logger.error(
+                "Required solution variant failed approach_type=%s error=%s response_preview=%s",
+                approach_type,
+                exc,
+                response_preview(raw),
+            )
+            raise
+
+    deduped = _dedupe_and_order_variants(variants)
+    present_types = {variant["approach_type"] for variant in deduped}
+    missing_required = {"BRUTE_FORCE", "OPTIMAL"} - present_types
+    if missing_required:
+        raise ValueError(f"Required solution variants are missing: {sorted(missing_required)}")
+    logger.info(
+        "Solution variants parsed count=%s approach_types=%s",
+        len(deduped),
+        [variant["approach_type"] for variant in deduped],
+    )
+    return deduped
 
 
 def repair_solution(
@@ -67,6 +130,70 @@ def repair_solution(
     return result
 
 
+def select_primary_solution(solutions: list[dict[str, str]]) -> dict[str, str]:
+    if not solutions:
+        raise ValueError("No solution variants available.")
+    for preferred in ("OPTIMAL", "EXPECTED", "FINAL"):
+        for solution in solutions:
+            if solution.get("approach_type", "").upper() == preferred:
+                return solution
+    return solutions[-1]
+
+
+def _dedupe_and_order_variants(variants: list[dict[str, str]]) -> list[dict[str, str]]:
+    by_type: dict[str, dict[str, str]] = {}
+    for variant in variants:
+        approach = variant.get("approach_type", "FINAL").upper()
+        variant["approach_type"] = _normalize_approach_type(approach)
+        by_type.setdefault(variant["approach_type"], variant)
+    ordered = sorted(by_type.values(), key=lambda item: APPROACH_ORDER.get(item["approach_type"], 10))
+    return _remove_similar_variants(ordered)
+
+
+def _remove_similar_variants(variants: list[dict[str, str]]) -> list[dict[str, str]]:
+    if len(variants) <= 2:
+        return variants
+
+    required = {
+        variants[0].get("approach_type", ""),
+        (select_primary_solution(variants).get("approach_type", "") if variants else ""),
+    }
+    kept: list[dict[str, str]] = []
+    skipped: list[str] = []
+    for variant in variants:
+        approach = variant.get("approach_type", "")
+        if approach in required:
+            kept.append(variant)
+            continue
+        if any(_solutions_are_too_similar(variant, existing) for existing in kept):
+            skipped.append(approach)
+            continue
+        kept.append(variant)
+
+    if skipped:
+        logger.info("Dropped similar solution variants approach_types=%s", skipped)
+    return sorted(kept, key=lambda item: APPROACH_ORDER.get(item["approach_type"], 10))
+
+
+def _solutions_are_too_similar(left: dict[str, str], right: dict[str, str]) -> bool:
+    same_complexity = (
+        left.get("time_complexity", "").strip().lower() == right.get("time_complexity", "").strip().lower()
+        and left.get("space_complexity", "").strip().lower() == right.get("space_complexity", "").strip().lower()
+    )
+    left_code = _code_fingerprint(left.get("code", ""))
+    right_code = _code_fingerprint(right.get("code", ""))
+    if not left_code or not right_code:
+        return same_complexity
+    similarity = SequenceMatcher(None, left_code, right_code).ratio()
+    return same_complexity and similarity >= 0.9
+
+
+def _code_fingerprint(code: str) -> str:
+    code = re.sub(r"//.*?$|/\*.*?\*/|#.*?$", "", code, flags=re.MULTILINE | re.DOTALL)
+    code = re.sub(r"\s+", "", code)
+    return code.lower()
+
+
 def _normalize_solution_payload(
     data: dict[str, object],
     fallback_pattern: str,
@@ -84,7 +211,7 @@ def _normalize_solution_payload(
         return default
 
     result = {
-        "approach_type": field("approach_type", "FINAL"),
+        "approach_type": _normalize_approach_type(field("approach_type", "FINAL")),
         "algorithm_pattern": field("algorithm_pattern", fallback_pattern),
         "explanation": field(
             "explanation",
@@ -98,6 +225,17 @@ def _normalize_solution_payload(
     if defaults_used:
         logger.warning("Solution payload missing optional fields; defaults used fields=%s", defaults_used)
     return result
+
+
+def _normalize_approach_type(value: str) -> str:
+    normalized = value.strip().upper().replace(" ", "_").replace("-", "_")
+    if normalized in {"AVERAGE", "BETTER", "INTERMEDIATE"}:
+        return "IMPROVED"
+    if normalized in {"EXPECTED", "FINAL", "BEST"}:
+        return "OPTIMAL"
+    if normalized in {"BRUTE", "NAIVE"}:
+        return "BRUTE_FORCE"
+    return normalized[:40] or "OPTIMAL"
 
 
 def _fallback_pseudocode(pattern: str) -> str:

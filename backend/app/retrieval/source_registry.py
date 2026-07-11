@@ -1,6 +1,11 @@
 import logging
 from dataclasses import dataclass
 
+import httpx
+import trafilatura
+from bs4 import BeautifulSoup
+
+from app.config import get_settings
 from app.retrieval.compliance import apply_storage_limit
 
 
@@ -51,15 +56,66 @@ CURATED_PATTERN_SOURCES = {
         "Two pointers keep two positions moving through a sequence to avoid checking every pair.",
     ),
     "stack": (
-        "Stack data structure - CP Algorithms",
-        "https://cp-algorithms.com/data_structures/stack_queue_modification.html",
-        "Stack-based algorithms track nested, previous, or monotonic state with last-in-first-out behavior.",
+        "Valid Parentheses in an Expression - GeeksforGeeks",
+        "https://www.geeksforgeeks.org/dsa/check-for-balanced-parentheses-in-an-expression/",
+        "Stack-based bracket matching pushes openings, checks each closing bracket against the stack top, and finishes balanced only when the stack is empty.",
     ),
     "heap": (
         "Priority queues and heaps - CP Algorithms",
         "https://cp-algorithms.com/data_structures/stack_queue_modification.html",
         "Priority queues help repeatedly select the minimum or maximum available candidate.",
     ),
+}
+
+PATTERN_SOURCE_CANDIDATES = {
+    "stack": [
+        (
+            "Valid Parentheses in an Expression - GeeksforGeeks",
+            "https://www.geeksforgeeks.org/dsa/check-for-balanced-parentheses-in-an-expression/",
+            "geeksforgeeks",
+            3,
+            "Stack illustration for balanced parentheses with approach comparison and step-by-step explanation.",
+        ),
+        (
+            "Stack data structure - CP Algorithms",
+            "https://cp-algorithms.com/data_structures/stack_queue_modification.html",
+            "cp_algorithms",
+            1,
+            "Stack-based algorithms track nested, previous, or monotonic state with last-in-first-out behavior.",
+        ),
+    ],
+    "strings": [
+        (
+            "String algorithms - CP Algorithms",
+            "https://cp-algorithms.com/string/string-hashing.html",
+            "cp_algorithms",
+            1,
+            "String processing problems often rely on scans, matching, hashing, and careful boundary handling.",
+        ),
+        (
+            "Java String documentation",
+            "https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/String.html",
+            "official_docs",
+            1,
+            "Official Java String behavior and methods for parsing and scanning text.",
+        ),
+    ],
+    "hash_map": [
+        (
+            "Hash table based lookup",
+            "https://github.com/TheAlgorithms/Python",
+            "the_algorithms",
+            1,
+            "Hash maps support near constant-time lookup and are commonly used to remember values, counts, or indices.",
+        ),
+        (
+            "Java HashMap documentation",
+            "https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/util/HashMap.html",
+            "official_docs",
+            1,
+            "Official Java HashMap behavior, lookup, and update semantics.",
+        ),
+    ],
 }
 
 GENERAL_KNOWLEDGE_SOURCES = [
@@ -106,9 +162,17 @@ def _source_name_for_url(url: str) -> str:
     return "generic_web"
 
 
-def _source_from_parts(title: str, url: str, source_name: str, tier: int, text: str, method: str) -> RetrievedSource:
+def _source_from_parts(
+    title: str,
+    url: str,
+    source_name: str,
+    tier: int,
+    text: str,
+    method: str,
+    license_note: str | None = None,
+) -> RetrievedSource:
     stored_text, cache_allowed = apply_storage_limit(source_name, text)
-    return RetrievedSource(title, url, source_name, tier, stored_text, method, cache_allowed)
+    return RetrievedSource(title, url, source_name, tier, stored_text, method, cache_allowed, license_note)
 
 
 def _seed_source_for_pattern(pattern: str) -> RetrievedSource:
@@ -132,14 +196,60 @@ def _general_sources() -> list[RetrievedSource]:
     ]
 
 
-def retrieve_sources(problem_text: str, patterns: list[str], source_urls: list[str]) -> list[RetrievedSource]:
+def _candidate_sources_for_patterns(patterns: list[str]) -> list[RetrievedSource]:
+    candidates: list[RetrievedSource] = []
+    for pattern in patterns[:5]:
+        for title, url, source_name, tier, text in PATTERN_SOURCE_CANDIDATES.get(pattern, []):
+            candidates.append(_source_from_parts(title, url, source_name, tier, text, "curated_pattern_candidate"))
+        candidates.append(_seed_source_for_pattern(pattern))
+    return candidates
+
+
+def _fetch_source(source: RetrievedSource) -> RetrievedSource:
+    try:
+        response = httpx.get(source.url, timeout=6.0, follow_redirects=True, headers={"user-agent": "StudyBuddyBot/0.1"})
+        response.raise_for_status()
+    except Exception as exc:
+        logger.warning("Source fetch failed url=%s error=%s", source.url, exc)
+        return source
+
+    extracted = trafilatura.extract(response.text, include_tables=True, include_comments=False) or ""
+    if not extracted.strip():
+        soup = BeautifulSoup(response.text, "html.parser")
+        for tag in soup(["script", "style", "noscript"]):
+            tag.decompose()
+        extracted = soup.get_text("\n")
+    text = "\n".join(line.strip() for line in extracted.splitlines() if line.strip())
+    if not text:
+        return source
+    stored_text, cache_allowed = apply_storage_limit(source.source_name, text)
+    return RetrievedSource(
+        title=source.title,
+        url=source.url,
+        source_name=source.source_name,
+        source_tier=source.source_tier,
+        text=stored_text,
+        retrieval_method=f"{source.retrieval_method}+fetched",
+        is_cache_allowed=cache_allowed,
+        license_note="Fetched and stored according to source policy.",
+    )
+
+
+def retrieve_sources(
+    problem_text: str,
+    patterns: list[str],
+    source_urls: list[str],
+    local_sources: list[RetrievedSource] | None = None,
+) -> list[RetrievedSource]:
+    settings = get_settings()
     logger.info(
-        "Retrieving sources problem_chars=%s pattern_count=%s user_url_count=%s",
+        "Retrieving sources problem_chars=%s pattern_count=%s user_url_count=%s local_count=%s",
         len(problem_text),
         len(patterns),
         len(source_urls),
+        len(local_sources or []),
     )
-    sources: list[RetrievedSource] = []
+    sources: list[RetrievedSource] = list(local_sources or [])
     for url in source_urls:
         title = "User provided source"
         source_name = _source_name_for_url(url)
@@ -158,18 +268,25 @@ def retrieve_sources(problem_text: str, patterns: list[str], source_urls: list[s
         )
 
     sources.extend(_general_sources())
-
-    for pattern in patterns[:4]:
-        sources.append(_seed_source_for_pattern(pattern))
+    sources.extend(_candidate_sources_for_patterns(patterns))
 
     unique: dict[str, RetrievedSource] = {}
     for source in sources:
         unique[source.url] = source
-    result = list(unique.values())
+    ordered = list(unique.values())
+    fetched: list[RetrievedSource] = []
+    local_count = len(local_sources or [])
+    target_count = min(settings.max_sources_per_job, max(6, local_count + 4))
+    for source in ordered:
+        if len(fetched) >= target_count:
+            break
+        should_fetch = "+fetched" not in source.retrieval_method and source.retrieval_method != "local_rag_reuse"
+        fetched.append(_fetch_source(source) if should_fetch else source)
     logger.info(
-        "Sources selected total=%s unique=%s names=%s",
+        "Sources selected total=%s unique=%s final=%s names=%s",
         len(sources),
-        len(result),
-        sorted({source.source_name for source in result}),
+        len(ordered),
+        len(fetched),
+        sorted({source.source_name for source in fetched}),
     )
-    return result
+    return fetched

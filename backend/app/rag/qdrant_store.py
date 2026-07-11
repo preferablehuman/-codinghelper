@@ -37,6 +37,47 @@ class QdrantStore:
             return ["" for _ in vectors]
         return point_ids
 
+    def search_chunks(self, query_vector: list[float], limit: int = 5, score_threshold: float = 0.65) -> list[dict[str, object]]:
+        if not query_vector:
+            return []
+        try:
+            from qdrant_client import QdrantClient
+
+            client = QdrantClient(url=self.settings.qdrant_url)
+            if not client.collection_exists(self.settings.qdrant_collection):
+                logger.info("Qdrant search skipped because collection does not exist collection=%s", self.settings.qdrant_collection)
+                return []
+            try:
+                response = client.search(
+                    collection_name=self.settings.qdrant_collection,
+                    query_vector=query_vector,
+                    limit=limit,
+                    score_threshold=score_threshold,
+                    with_payload=True,
+                )
+            except AttributeError:
+                query_response = client.query_points(
+                    collection_name=self.settings.qdrant_collection,
+                    query=query_vector,
+                    limit=limit,
+                    score_threshold=score_threshold,
+                    with_payload=True,
+                )
+                response = getattr(query_response, "points", [])
+            results = [
+                {
+                    "id": str(getattr(point, "id", "")),
+                    "score": float(getattr(point, "score", 0.0) or 0.0),
+                    "payload": getattr(point, "payload", {}) or {},
+                }
+                for point in response
+            ]
+            logger.info("Qdrant search complete collection=%s count=%s", self.settings.qdrant_collection, len(results))
+            return results
+        except Exception:
+            logger.exception("Qdrant search failed collection=%s", self.settings.qdrant_collection)
+            return []
+
     def _ensure_collection(self, client, vector_size: int, distance_type, vector_params_type) -> None:
         collection = self.settings.qdrant_collection
         if not client.collection_exists(collection):

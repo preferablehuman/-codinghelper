@@ -1,20 +1,21 @@
 # Study Buddy Programming Explainer
 
-Study Buddy is a local-first programming explanation assistant. It accepts a programming or DSA problem, builds a grounded evidence pack from approved sources, generates a solution with a local model runtime, verifies code in a sandbox, and displays an explanation with slide markdown.
+Study Buddy is a programming explanation assistant. It accepts a programming or DSA problem, builds a grounded evidence pack, generates solutions through a provider-neutral model gateway, verifies code in a sandbox, and displays an interactive explanation.
 
 ## Architecture
 
-The project runs as seven Docker Compose services:
+The default project runs as seven Docker Compose services, with Ollama available as an optional eighth service:
 
 - `frontend`: React, Vite, TypeScript, Tailwind UI
-- `backend`: FastAPI orchestration, PostgreSQL persistence, RAG modules, model-runtime client
-- `ollama`: local GGUF model serving with GPU access
+- `backend`: provider-neutral FastAPI orchestration, persistence, and RAG modules
+- `model-gateway`: stable internal `/health` and `/generate` API with provider adapters
 - `postgres`: relational state for jobs, results, metadata, history
 - `qdrant`: vector database for source chunks and semantic retrieval
 - `sandbox-runner`: isolated Python and Java code execution
 - `slide-renderer`: markdown, HTML preview, and PowerPoint deck artifact generation
+- `ollama` (optional): local GGUF model serving when the gateway is configured for Ollama
 
-PostgreSQL is the application source of truth. Qdrant stores embeddings. The backend orchestrates everything. Generated code only runs in `sandbox-runner`.
+PostgreSQL is the application source of truth. Qdrant stores embeddings. The backend orchestrates jobs but has no Gemini/Ollama knowledge; all LLM calls cross the model-gateway API. Generated code only runs in `sandbox-runner`.
 
 ## Local Data And Live Code Mounts
 
@@ -30,7 +31,7 @@ All persistent container data is directed into `./data`:
 - `data/sandbox-runner/work`: temporary generated-code execution work area, cleaned per run
 - `data/slide-renderer/generated-slides`, `data/slide-renderer/node_modules`, and `data/slide-renderer/npm-cache`: slide artifacts and Node cache
 
-The code for `frontend`, `backend`, `sandbox-runner`, and `slide-renderer` is bind-mounted into their containers. Backend and sandbox services run with reload enabled, and Node services install dependencies into `./data/...` at startup. Code-only edits should only require restarting the affected container, not rebuilding its image.
+The code for `frontend`, `backend`, `model-gateway`, `sandbox-runner`, and `slide-renderer` is bind-mounted into their containers. Python services run with reload enabled, and Node services install dependencies into `./data/...` at startup.
 
 ## Quick Start
 
@@ -44,6 +45,7 @@ After the first build, code changes can usually be picked up with:
 
 ```powershell
 docker compose restart backend
+docker compose restart model-gateway
 docker compose restart sandbox-runner
 docker compose restart slide-renderer
 docker compose restart frontend
@@ -53,7 +55,7 @@ Open:
 
 - Frontend: http://localhost:5173
 - Backend health: http://localhost:8000/api/health
-- Ollama API: http://localhost:11434
+- Model gateway: internal-only at `http://model-gateway:8300`; inspect readiness through backend `/api/health`
 - Sandbox health: http://localhost:8100/health
 - Slide renderer health: http://localhost:8200/health
 - Qdrant: http://localhost:6333
@@ -89,28 +91,31 @@ File logs rotate at `LOG_MAX_BYTES=10485760` and keep `LOG_MAX_FILES=10` files t
 
 Set `VERBOSE_LOGGING=true` in `.env` before starting Compose to enable debug-level app logs and more detailed service output. PostgreSQL and Qdrant can be tuned further with `POSTGRES_LOG_*` and `QDRANT_LOG_LEVEL` in `.env`.
 
-## Model Setup
+## Model Gateway
 
-The active generation runtime is Ollama. The backend talks to the Ollama HTTP API and keeps the older Hugging Face Transformers implementation in `backend/app/model_runtime/transformers_runtime.py` as an unused alternate path.
+The application talks only to `MODEL_GATEWAY_URL`. Provider selection, credentials, model names, retries, and provider-specific HTTP formats belong exclusively to `model-gateway`.
 
-Selected defaults:
+For Gemini, configure `.env`:
 
-- Active generation model: `qwen2.5-coder:7b` through Ollama
-- Quantization: Ollama `Q4_K_M`
-- Installed model size: about 4.7 GB
-- Configured context: `OLLAMA_NUM_CTX=8192`
-- Retrieval embedding model: [`BAAI/bge-m3`](https://huggingface.co/BAAI/bge-m3)
+```dotenv
+LLM_PROVIDER=gemini
+LLM_MODEL=gemini-2.5-flash
+GEMINI_API_KEY=your_key_from_google_ai_studio
+```
 
-The first Ollama startup pulls the model once into `data/ollama`, then later starts reuse that mounted store. The backend does not lazy-load the model for the first job: it waits for the Ollama service to become healthy, sends a warmup generation request during FastAPI startup, and only reports startup complete after model preload succeeds.
+Restart only the gateway after changing providers or keys:
 
-Important runtime settings:
+```powershell
+docker compose restart model-gateway
+```
 
-- `MODEL_PROVIDER=ollama` selects the Ollama runtime.
-- `OLLAMA_MODEL=qwen2.5-coder:7b` controls the model pulled by the Ollama container and used by the backend.
-- `OLLAMA_KEEP_ALIVE=-1` keeps the warmed model resident.
-- `OLLAMA_REQUIRE_GPU=true` makes the Ollama container fail if NVIDIA tooling is unavailable or if `ollama ps` does not report GPU execution for the warmed model. Backend startup also fails if Ollama reports zero VRAM residency for the warmed model.
-- `OLLAMA_NUM_CTX=8192` keeps useful context while avoiding an oversized KV cache on modest VRAM.
-- `data/ollama` is mounted to `/root/.ollama`, so the model is not downloaded again on every container start.
+The credential is available only to the gateway container and is never included in the frontend bundle or normal API responses. Adding another provider requires one gateway adapter; the application backend, pipeline, and frontend contract remain unchanged.
+
+The backend intentionally stays online when the model gateway is degraded. `/api/health` reports model readiness, while history and other non-generation features continue working. Provider failures therefore appear as explicit job/gateway errors instead of browser-level `Failed to fetch` messages.
+
+The frontend sends `/api` requests to its own origin and Vite proxies them internally to `backend:8000`. This avoids browser coupling to `localhost:8000` and works when the UI is opened from another device on the network.
+
+The solution ladder is generated as separate structured requests for brute-force, optional improved, and optimal implementations. This prevents a truncated combined response from silently producing only one approach.
 
 The job pipeline calls the configured model runtime for solution generation, test generation, explanation generation, and slide markdown generation. If the model cannot load or returns malformed structured output, the job is marked failed instead of silently using a deterministic placeholder.
 

@@ -1,45 +1,120 @@
-import type { TestCase, VerificationRun } from "../types/api";
+import { Play } from "lucide-react";
+import { useMemo, useState } from "react";
+
+import { executeCode } from "../api/client";
+import type { ExecutionResponse, GeneratedSolution, TestCase, VerificationRun } from "../types/api";
 
 export default function TestResultPanel({
   tests,
-  verificationRuns
+  verificationRuns,
+  solutions = [],
+  language
 }: {
   tests: TestCase[];
   verificationRuns: VerificationRun[];
+  solutions?: GeneratedSolution[];
+  language: string;
 }) {
   const latest = verificationRuns.at(-1);
+  const solution = useMemo(() => preferredSolution(solutions), [solutions]);
+  const [running, setRunning] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
+  const [runResult, setRunResult] = useState<ExecutionResponse | null>(null);
+  const recommendedMinimum = 10;
+  const hasRecommendedMinimum = tests.length >= recommendedMinimum;
+
+  async function handleRunGeneratedTests() {
+    if (!solution) {
+      return;
+    }
+    setRunning(true);
+    setRunError(null);
+    try {
+      setRunResult(
+        await executeCode({
+          language,
+          code: solution.code,
+          input: "",
+          expected_output: null,
+          tests: tests.map((test) => ({ input: test.input_data, expected_output: test.expected_output })),
+          timeout_seconds: 5,
+          memory_mb: 256
+        })
+      );
+    } catch (err) {
+      setRunError(err instanceof Error ? err.message : "Unable to execute generated tests");
+      setRunResult(null);
+    } finally {
+      setRunning(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
-      <section className="rounded-md border border-slate-200 bg-white p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Verification</h2>
+      <section className="surface p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">Verification</h2>
+          <button
+            type="button"
+            onClick={() => void handleRunGeneratedTests()}
+            disabled={running || !solution || tests.length === 0}
+            className="focus-ring inline-flex h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-zinc-400"
+          >
+            <Play size={15} aria-hidden="true" />
+            {running ? "Running..." : `Execute ${tests.length} tests`}
+          </button>
+        </div>
         {latest ? (
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <div className="mt-4 grid gap-3 sm:grid-cols-4">
             <Metric label="Status" value={latest.status} />
             <Metric label="Passed" value={String(latest.passed_count)} />
             <Metric label="Failed" value={String(latest.failed_count)} />
+            <Metric label="Avg Time" value={latest.execution_time_ms ? `${latest.execution_time_ms} ms` : "-"} />
           </div>
         ) : (
-          <p className="mt-3 text-sm text-slate-500">Verification has not run yet.</p>
+          <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">Verification has not run yet.</p>
         )}
-        {latest?.stderr ? <pre className="mt-3 whitespace-pre-wrap rounded-md bg-red-50 p-3 text-xs text-red-700">{latest.stderr}</pre> : null}
-      </section>
-      <section className="rounded-md border border-slate-200 bg-white">
-        <div className="border-b border-slate-200 px-4 py-3">
-          <h2 className="text-sm font-semibold">Test Cases</h2>
+        {runResult ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-4">
+            <Metric label="Run Status" value={runResult.status} />
+            <Metric label="Run Passed" value={String(runResult.passed_count)} />
+            <Metric label="Run Failed" value={String(runResult.failed_count)} />
+            <Metric label="Run Avg" value={runResult.average_execution_time_ms === null ? "-" : `${runResult.average_execution_time_ms} ms`} />
+          </div>
+        ) : null}
+        {runError ? <p className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">{runError}</p> : null}
+        <div
+          className={`mt-4 rounded-md border p-3 text-sm ${
+            hasRecommendedMinimum
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200"
+              : "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200"
+          }`}
+        >
+          Recommended minimum: {recommendedMinimum} meaningful test cases. There is no maximum limit.
         </div>
-        <div className="divide-y divide-slate-100">
+        {latest?.stderr ? <pre className="mt-3 whitespace-pre-wrap rounded-md bg-red-50 p-3 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-200">{latest.stderr}</pre> : null}
+      </section>
+      <section className="surface overflow-hidden">
+        <div className="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
+          <h2 className="text-sm font-semibold text-zinc-950 dark:text-white">Test Cases</h2>
+        </div>
+        <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
           {tests.length === 0 ? (
-            <p className="p-4 text-sm text-slate-500">No tests generated yet.</p>
+            <p className="p-4 text-sm text-zinc-500 dark:text-zinc-400">No tests generated yet.</p>
           ) : (
             tests.map((test, index) => (
-              <div key={test.id} className="grid gap-3 p-4 md:grid-cols-2">
+              <div key={test.id} className="grid gap-3 p-5 md:grid-cols-2">
                 <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Input {index + 1}</p>
-                  <pre className="mt-1 whitespace-pre-wrap rounded-md bg-slate-100 p-3 text-xs">{test.input_data || "(empty input)"}</pre>
+                  <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Input {index + 1}</p>
+                  <pre className="mt-1 whitespace-pre-wrap rounded-md bg-zinc-950 p-3 font-mono text-xs text-zinc-100">
+                    {test.input_data || "(empty input)"}
+                  </pre>
                 </div>
                 <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Expected</p>
-                  <pre className="mt-1 whitespace-pre-wrap rounded-md bg-slate-100 p-3 text-xs">{test.expected_output || "(none)"}</pre>
+                  <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Expected</p>
+                  <pre className="mt-1 whitespace-pre-wrap rounded-md bg-zinc-100 p-3 font-mono text-xs text-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
+                    {test.expected_output || "(none)"}
+                  </pre>
                 </div>
               </div>
             ))
@@ -50,12 +125,20 @@ export default function TestResultPanel({
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function preferredSolution(solutions: GeneratedSolution[]): GeneratedSolution | undefined {
   return (
-    <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-      <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-lg font-semibold">{value}</p>
-    </div>
+    solutions.find((solution) => solution.approach_type.toUpperCase() === "OPTIMAL") ??
+    solutions.find((solution) => solution.approach_type.toUpperCase() === "EXPECTED") ??
+    solutions.find((solution) => solution.approach_type.toUpperCase() === "FINAL") ??
+    solutions.at(-1)
   );
 }
 
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900">
+      <p className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{label}</p>
+      <p className="mt-1 font-mono text-lg font-semibold text-zinc-950 dark:text-zinc-100">{value}</p>
+    </div>
+  );
+}

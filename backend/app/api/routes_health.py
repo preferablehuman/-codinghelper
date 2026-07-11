@@ -28,12 +28,12 @@ def health() -> dict[str, object]:
         }
 
     return {
-        "status": "ok",
+        "status": "ok" if database == "ok" else "degraded",
         "service": "backend",
         "environment": settings.app_env,
         "database": database,
-        "model_provider": settings.model_provider,
-        "model_lazy_load": settings.model_lazy_load,
-        "model_startup_load_required": True,
+        "model_provider": model_status.get("provider", "gateway"),
+        "model_gateway": settings.model_gateway_url,
+        "model_startup_load_required": False,
         "model": model_status,
     }
