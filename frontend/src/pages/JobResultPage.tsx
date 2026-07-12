@@ -81,7 +81,6 @@ export default function JobResultPage() {
   }, [job?.id, job?.status, jobId]);
 
   const latestExplanation = useMemo(() => job?.explanations.at(-1), [job]);
-  const latestSlide = useMemo(() => job?.slide_artifacts.at(-1), [job]);
   const verifiedSolutions = useMemo(() => job?.solutions.filter((solution) => solution.verification_status !== "FAILED") || [], [job]);
 
   if (error) {
@@ -162,7 +161,6 @@ export default function JobResultPage() {
               tests={job.test_cases}
               verificationRuns={job.verification_runs}
               language={job.language}
-              slide={latestSlide}
             />
           ) : null}
           {activeTab === "code" ? <CodeViewer solutions={verifiedSolutions} language={job.language} tests={job.test_cases} /> : null}

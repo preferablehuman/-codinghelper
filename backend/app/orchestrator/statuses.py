@@ -20,7 +20,6 @@ class JobStatus(StrEnum):
     VERIFYING = "VERIFYING"
     REPAIRING = "REPAIRING"
     GENERATING_EXPLANATION = "GENERATING_EXPLANATION"
-    GENERATING_SLIDES = "GENERATING_SLIDES"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
 
@@ -44,7 +43,6 @@ STATUS_PROGRESS = {
     JobStatus.VERIFYING: (74, "Verifying generated code"),
     JobStatus.REPAIRING: (82, "Repairing failed solution"),
     JobStatus.GENERATING_EXPLANATION: (88, "Generating explanation"),
-    JobStatus.GENERATING_SLIDES: (94, "Generating slides"),
     JobStatus.COMPLETED: (100, "Completed"),
     JobStatus.FAILED: (100, "Failed"),
 }

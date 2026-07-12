@@ -90,6 +90,6 @@ def test_explanation_retries_a_truncated_response_with_larger_budget() -> None:
 
     assert result == EXPLANATION
     assert len(runtime.calls) == 2
-    assert all(call[1] == 8192 for call in runtime.calls)
+    assert all(call[1] == 12288 for call in runtime.calls)
     assert all(call[2] is True for call in runtime.calls)
     assert "previous response was truncated or malformed" in runtime.calls[1][0]

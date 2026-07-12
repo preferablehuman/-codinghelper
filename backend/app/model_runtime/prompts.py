@@ -52,6 +52,9 @@ Rules:
 - Do not invent unsupported source claims.
 - Use the evidence only as grounding; solve the actual problem statement.
 - Set approach_type to "FINAL".
+- algorithm_pattern must be a concise algorithm or data-structure name, not a paragraph.
+- time_complexity must contain the Big-O expression followed by at most one concise explanatory sentence.
+- space_complexity must contain the Big-O expression followed by at most one concise explanatory sentence.
 
 Problem:
 {problem_text}
@@ -143,6 +146,9 @@ Rules:
 - Use stdin/stdout for execution tests. If the problem statement is from an online judge and does not define stdin explicitly, read the stated function arguments from stdin in the simplest natural format. For example, if the input is a single string `s`, read one line/string and print the returned string.
 - Do not hard-code sample calls in `main`; `main` must read stdin and print exactly one answer.
 - Do not use external libraries beyond the language standard library.
+- algorithm_pattern must be a concise algorithm or data-structure name, not a paragraph.
+- time_complexity must contain the Big-O expression followed by at most one concise explanatory sentence.
+- space_complexity must contain the Big-O expression followed by at most one concise explanatory sentence.
 - Do not invent unsupported source claims.
 - Use the evidence only as grounding; solve the actual problem statement.
 - The OPTIMAL approach should be the expected interview/competitive-programming solution.
@@ -210,6 +216,10 @@ Code requirements:
 - Do not hard-code sample calls in main; read stdin and print exactly one answer.
 - Use only the language standard library.
 - Solve the actual problem and do not invent unsupported source claims.
+- algorithm_pattern must be a concise algorithm or data-structure name, not a paragraph.
+- time_complexity must contain the Big-O expression followed by at most one concise explanatory sentence.
+- space_complexity must contain the Big-O expression followed by at most one concise explanatory sentence.
+- explanation must teach a beginner the approach intuition, prerequisite concepts, data structures and their operations, algorithm flow, important state variables, correctness idea, and how this approach differs from earlier approaches.
 
 Earlier approaches in this ladder:
 {previous_summary}
@@ -282,6 +292,9 @@ Rules:
 - The repaired code must be a complete standalone {language} program.
 - Keep stdin/stdout behavior compatible with the tests.
 - Do not hard-code sample calls in `main`; `main` must read stdin and print exactly one answer.
+- algorithm_pattern must be a concise algorithm or data-structure name, not a paragraph.
+- time_complexity must contain the Big-O expression followed by at most one concise explanatory sentence.
+- space_complexity must contain the Big-O expression followed by at most one concise explanatory sentence.
 - Use only the language standard library.
 - Fix the observed compile/runtime/wrong-answer issue.
 - Do not invent unsupported source claims.
@@ -319,19 +332,32 @@ Return only one valid JSON object with these string fields:
 - complexity_analysis
 
 Rules:
-- Explain in a way suitable for a learner.
+- Write for a complete beginner who may not know the problem pattern or data structures yet.
 - Keep claims grounded in the problem, solution, and evidence.
 - Mention verification status without overstating correctness.
 - Be specific about pitfalls.
-- Explain the buildup from brute force to improved to optimal when `approach_ladder` is available.
+- This request covers one verified approach. Explain that approach completely; the application will label and combine it with the other verified approaches.
+- intuition: explain the problem in plain language, the goal, the main insight, and how a learner could discover the approach.
+- brute_force: teach the direct approach from first principles, including its state, decisions, repeated work, and limitations. Then explain what motivates the next approach.
+- optimized_approach: for every approach, explain the algorithm flow in execution order, why each step exists, what work it avoids, and how it differs from the other approaches.
+- Before using any data structure, explain what it is, which operations are used, what each stored value means, and why it fits this problem. Cover arrays, lists, maps, sets, stacks, queues, heaps, recursion, or other structures actually used by the code.
+- Explain recursion and backtracking basics when used: call state, base case, choice, recursive transition, return value, and state restoration.
+- Explain important code blocks and variables by name. Connect pseudocode phases to the executable code rather than paraphrasing the code line by line.
+- Include a short correctness argument based on an invariant or exhaustive coverage for each approach.
+- complexity_analysis: derive time and space costs for each approach, define every symbol used, and distinguish auxiliary memory from output storage.
+- pitfalls: organize mistakes by approach and include input parsing, boundary cases, state mutation/restoration, duplicates/order, overflow, and output-format concerns when applicable.
 - The dry_run field must include:
-  - one section for each available approach using headings like `## BRUTE_FORCE` and `## OPTIMAL`,
-  - a compact code-logic stub or pseudocode trace for that approach,
-  - a GeeksforGeeks-style illustration table with columns: Step, Input/Char, Stack/State, Action, Result,
-  - how key variables/state change after each step,
-  - the exact point where the algorithm makes its main decision.
-- Prefer concrete sample values from the problem statement. If no sample is provided, create a small representative input and label it as representative.
-- Do not provide generic dry-run text; every step must change or inspect real state.
+  - `### Example being traced`: quote the first complete input/output example from the problem summary or solution context. Never silently replace a supplied example with an invented one.
+  - `### Annotated code stub`: give compact pseudocode that mirrors this solution's actual control flow. Number the phases and name the real state variables used by the code.
+  - `### State model`: define every variable or data-structure field visible in the trace, its initial value, permitted values, and what changing it means.
+  - `### Step-by-step execution`: trace the given example from parsing through final output. Use a Markdown table with columns `Step`, `Code phase`, `Current input`, `State before`, `Condition / decision`, `Action`, `State after`, and `Return / output`.
+  - show loop iterations, recursive calls, base cases, pruning, mutations, backtracking/restoration, returned values, and output accumulation whenever the solution uses them.
+  - split dense operations into micro-steps; do not jump from input directly to the answer or use phrases such as "continue similarly" for the important branch.
+  - after the table, include `### Call and return flow` for recursive solutions or `### Iteration flow` for iterative solutions. Explain how control moves between code phases.
+  - include `### Why this step is valid` and connect the main decisions to the invariant or problem rule they preserve.
+- Prefer concrete sample values from the original problem. If the supplied context truly contains no example, create the smallest representative input, label it clearly, and explain why it exercises the core logic.
+- Do not provide generic dry-run prose. Every row must inspect or change concrete state, and every state change must be consistent with the supplied code.
+- Prefer completeness and teaching clarity over brevity. Do not assume prior competitive-programming knowledge.
 
 Problem summary:
 {problem_summary}
@@ -347,73 +373,4 @@ Verification:
 
 Solution:
 {solution}
-"""
-
-
-def slide_deck_prompt(
-    title: str,
-    problem_summary: str,
-    pattern: str,
-    solution: dict[str, object],
-    explanation: dict[str, str],
-    sources: list[dict[str, str]],
-) -> str:
-    return f"""Design a complete teaching deck for a learner who has never seen this problem or algorithm.
-
-Return only one valid JSON object with this shape:
-{{
-  "deck_title": "string",
-  "audience": "beginner programming learner",
-  "learning_objective": "what the learner can explain or execute after the deck",
-  "slides": [
-    {{
-      "kind": "title|problem|observation|comparison|approach|state|dry_run|code|correctness|verification|summary|references",
-      "title": "takeaway-style title",
-      "takeaway": "one sentence that states the slide's main point",
-      "bullets": ["0 to 5 concise supporting points"],
-      "flow": ["2 to 5 ordered state or decision labels"],
-      "code": "short relevant pseudocode or code excerpt, otherwise empty",
-      "table": {{"headers": ["header"], "rows": [["cell"]]}},
-      "notes": "optional detailed teaching explanation"
-    }}
-  ]
-}}
-
-Narrative requirements:
-- Create 12 to 16 slides following a cumulative learning progression.
-- Open with a minimal title slide, then explain the problem in plain language and translate constraints into algorithm observations.
-- Compare every genuinely distinct BRUTE_FORCE, IMPROVED, and OPTIMAL approach from Solution. Give each approach its own slide and explain what state it stores, what work it avoids, and why it improves.
-- Include one full comparison slide with approach, core idea, time, space, strength, and limitation.
-- Include one state/data-structure slide that visually describes what each stored value means.
-- Include at least two concrete dry-run slides. Use real sample values and tables with Step, Input or Cell, State Before, Decision, State After, and Result.
-- Include at least two code slides: first map pseudocode to phases, then trace the most important executable code lines. Keep each excerpt under 18 lines.
-- Include a correctness slide centered on the invariant and why all invalid/valid cases are covered.
-- Include verification with generated test categories, pass/fail counts, complexity, and pitfalls.
-- Close with a synthesis slide that teaches when to recognize and reuse this pattern, followed by a short references slide containing only relevant algorithm/code-intuition sources.
-
-Writing and layout requirements:
-- Each slide has exactly one teaching job and a takeaway-style title.
-- Use concrete state changes and decisions, not generic claims such as "this is efficient".
-- Keep visible bullets concise; place deeper explanation in notes.
-- Use flow only for ordered processes. Use table only when row/column comparison materially teaches the idea.
-- Do not repeat the same bullet across slides. Do not expose prompt or production instructions.
-- Never fabricate sample values, code behavior, complexity, or verification results; derive them from the supplied problem, solution, explanation, and sources.
-
-Title:
-{title}
-
-Problem summary:
-{problem_summary}
-
-Pattern:
-{pattern}
-
-Solution:
-{solution}
-
-Explanation:
-{explanation}
-
-Sources:
-{sources}
 """

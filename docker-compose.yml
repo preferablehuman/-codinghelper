@@ -73,8 +73,6 @@ services:
         condition: service_started
       sandbox-runner:
         condition: service_started
-      slide-renderer:
-        condition: service_started
       model-gateway:
         condition: service_started
 
@@ -248,25 +246,3 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-
-  slide-renderer:
-    build: ./slide-renderer
-    ports:
-      - "8200:8200"
-    environment:
-      - NPM_CONFIG_CACHE=/app/.npm-cache
-      - VERBOSE_LOGGING=${VERBOSE_LOGGING:-false}
-      - LOG_DIR=/app/logs
-      - LOG_MAX_BYTES=${LOG_MAX_BYTES:-10485760}
-      - LOG_MAX_FILES=${LOG_MAX_FILES:-10}
-    volumes:
-      - ./slide-renderer/server.js:/app/server.js:ro
-      - ./slide-renderer/test.js:/app/test.js:ro
-      - ./slide-renderer/package.json:/app/package.json:ro
-      - ./scripts/tee-rotate.sh:/logging/tee-rotate.sh:ro
-      - ./data/slide-renderer/node_modules:/app/node_modules
-      - ./data/slide-renderer/npm-cache:/app/.npm-cache
-      - ./data/slide-renderer/generated-slides:/slides
-      - ./logs/slide-renderer:/app/logs
-    command: sh -c "sh /logging/tee-rotate.sh slide-renderer npm install --package-lock=false && sh /logging/tee-rotate.sh slide-renderer npm start"
-    logging: *docker-log-options

@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 
-from app.artifacts.artifact_store import save_slide_markdown
 from app.config import get_settings
 from app.db.models import (
     CanonicalProblem,
@@ -18,7 +17,6 @@ from app.db.models import (
     Job,
     KnowledgeChunk,
     KnowledgeSource,
-    SlideArtifact,
     SourceChunk,
     SourceDocument,
     TestCase,
@@ -44,8 +42,6 @@ from app.rag.versions import VERIFICATION_VERSION
 from app.retrieval.source_registry import RetrievedSource, is_algorithm_source, retrieve_sources
 from app.retrieval.adapters.registry import enabled_adapters
 from app.retrieval.compliance import apply_storage_limit
-from app.slides.slide_markdown_generator import build_slide_deck, deck_to_markdown
-from app.slides.slide_renderer_client import render_slides
 from app.solver.code_generator import generate_solution_variants, repair_solution, select_primary_solution
 from app.solver.problem_analyzer import analyze_problem
 from app.solver.test_generator import generate_tests
@@ -270,15 +266,9 @@ def _complete_exact_reuse(db, job: Job, decision: RetrievalDecision, reuse, norm
     runtime = get_model_runtime()
     set_job_status(db, job, JobStatus.GENERATING_FROM_GROUNDED_SOLUTION)
     evidence_text = "The canonical algorithm was retrieved from the local verified corpus and reverified against stored asserting tests. Do not replace it unless verification identifies a defect."
-    explanation_data = build_explanation(runtime, job.problem_summary or normalized.extracted_title or "Programming problem", primary.algorithm_pattern, solution_context, evidence_text, verification)
+    explanation_context = f"{job.problem_summary or normalized.extracted_title or 'Programming problem'}\n\nOriginal problem statement and examples:\n{job.problem_text}"
+    explanation_data = build_explanation(runtime, explanation_context, primary.algorithm_pattern, solution_context, evidence_text, verification)
     db.add(Explanation(job_id=job.id, **explanation_data))
-    db.commit()
-    set_job_status(db, job, JobStatus.GENERATING_SLIDES)
-    deck = build_slide_deck(runtime, job.title or normalized.extracted_title or "Programming Problem", job.problem_summary or normalized.normalized_text[:240], primary.algorithm_pattern, solution_context, explanation_data, [])
-    markdown = deck_to_markdown(deck)
-    markdown_path = save_slide_markdown(job.id, markdown)
-    rendered = render_slides(job.id, markdown, deck)
-    db.add(SlideArtifact(job_id=job.id, markdown_path=markdown_path, html_path=rendered.get("html_path"), pdf_path=rendered.get("pdf_path"), pptx_path=rendered.get("pptx_path")))
     db.commit()
     set_job_status(db, job, JobStatus.COMPLETED)
     _store_retrieval_decision(db, job, decision, verification_status="PASSED", asserting_test_count=len([test for test in reuse.tests if test.get("expected_output") is not None]))
@@ -481,7 +471,16 @@ def run_job_pipeline(job_id: str) -> None:
             for variant in solution_variants:
                 row = GeneratedSolution(job_id=job.id, **variant)
                 db.add(row)
+                db.flush()
                 solution_rows.append(row)
+                logger.info(
+                    "Persisted solution candidate job_id=%s approach_type=%s algorithm_pattern_chars=%s time_complexity_chars=%s space_complexity_chars=%s",
+                    job.id,
+                    variant.get("approach_type"),
+                    len(variant.get("algorithm_pattern", "")),
+                    len(variant.get("time_complexity", "")),
+                    len(variant.get("space_complexity", "")),
+                )
             db.commit()
             for row in solution_rows:
                 db.refresh(row)
@@ -584,42 +583,11 @@ def run_job_pipeline(job_id: str) -> None:
             solution_context = {**solution_data, "approach_ladder": verified_ladder}
 
             set_job_status(db, job, JobStatus.GENERATING_EXPLANATION)
-            explanation_data = build_explanation(runtime, analysis.summary, analysis.selected_pattern, solution_context, evidence_text, verification)
+            explanation_context = f"{analysis.summary}\n\nOriginal problem statement and examples:\n{job.problem_text}"
+            explanation_data = build_explanation(runtime, explanation_context, analysis.selected_pattern, solution_context, evidence_text, verification)
             db.add(Explanation(job_id=job.id, **explanation_data))
             db.commit()
             logger.info("Generated explanation job_id=%s", job.id)
-
-            set_job_status(db, job, JobStatus.GENERATING_SLIDES)
-            source_dicts = [{"title": source.title, "url": source.url} for source in source_rows]
-            deck = build_slide_deck(
-                runtime,
-                job.title or "Programming Problem",
-                analysis.summary,
-                analysis.selected_pattern,
-                solution_context,
-                explanation_data,
-                source_dicts,
-            )
-            markdown = deck_to_markdown(deck)
-            markdown_path = save_slide_markdown(job.id, markdown)
-            rendered = render_slides(job.id, markdown, deck)
-            db.add(
-                SlideArtifact(
-                    job_id=job.id,
-                    markdown_path=markdown_path,
-                    html_path=rendered.get("html_path"),
-                    pdf_path=rendered.get("pdf_path"),
-                    pptx_path=rendered.get("pptx_path"),
-                )
-            )
-            db.commit()
-            logger.info(
-                "Generated slide artifact job_id=%s markdown_chars=%s html_path=%s pptx_path=%s",
-                job.id,
-                len(markdown),
-                rendered.get("html_path"),
-                rendered.get("pptx_path"),
-            )
 
             set_job_status(db, job, JobStatus.PROMOTING_KNOWLEDGE)
             promotion = promote_successful_job(db, job, normalized, signature, settings)

@@ -17,7 +17,6 @@ export type JobStatus =
   | "VERIFYING"
   | "REPAIRING"
   | "GENERATING_EXPLANATION"
-  | "GENERATING_SLIDES"
   | "COMPLETED"
   | "FAILED";
 

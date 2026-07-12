@@ -16,7 +16,6 @@ class Settings(BaseSettings):
     qdrant_problem_collection: str = "problem_corpus"
     qdrant_knowledge_collection: str = "knowledge_chunks"
     sandbox_runner_url: str = "http://sandbox-runner:8100"
-    slide_renderer_url: str = "http://slide-renderer:8200"
     model_gateway_url: str = "http://model-gateway:8300"
     model_gateway_request_timeout_seconds: float = 660.0
     model_gateway_health_timeout_seconds: float = 10.0

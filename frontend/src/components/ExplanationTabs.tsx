@@ -1,9 +1,9 @@
 import ReactMarkdown from "react-markdown";
-import { Download, ExternalLink, FileDown, Play, Route } from "lucide-react";
+import { Play, Route } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { executeCode } from "../api/client";
-import type { ExecutionResponse, Explanation, GeneratedSolution, SlideArtifact, TestCase, VerificationRun } from "../types/api";
+import type { ExecutionResponse, Explanation, GeneratedSolution, TestCase, VerificationRun } from "../types/api";
 
 const APPROACH_ORDER: Record<string, number> = {
   BRUTE_FORCE: 0,
@@ -15,40 +15,42 @@ const APPROACH_ORDER: Record<string, number> = {
   FINAL: 3
 };
 
-interface IllustrationRow {
-  step: string;
-  input: string;
-  state: string;
-  action: string;
-  result: string;
-}
-
 export default function ExplanationTabs({
   explanation,
   solutions = [],
   tests = [],
   verificationRuns = [],
-  language,
-  slide
+  language
 }: {
   explanation?: Explanation;
   solutions?: GeneratedSolution[];
   tests?: TestCase[];
   verificationRuns?: VerificationRun[];
   language: string;
-  slide?: SlideArtifact;
 }) {
   const orderedSolutions = useMemo(() => orderSolutions(solutions), [solutions]);
   const preferred = useMemo(() => preferredSolution(orderedSolutions), [orderedSolutions]);
   const [activeId, setActiveId] = useState<string | null>(preferred?.id ?? null);
   const activeSolution = orderedSolutions.find((solution) => solution.id === activeId) ?? preferred;
   const activeDryRun = useMemo(
-    () => extractApproachMarkdown(explanation?.dry_run || "", activeSolution?.approach_type || ""),
+    () => formatWalkthroughMarkdown(extractApproachMarkdown(explanation?.dry_run || "", activeSolution?.approach_type || "")),
     [activeSolution?.approach_type, explanation?.dry_run]
   );
-  const illustrationRows = useMemo(
-    () => buildIllustrationRows(activeDryRun, activeSolution),
-    [activeDryRun, activeSolution]
+  const activeIntuition = useMemo(
+    () => stripApproachHeading(extractApproachMarkdown(explanation?.intuition || "", activeSolution?.approach_type || "")),
+    [activeSolution?.approach_type, explanation?.intuition]
+  );
+  const activeApproachDetail = useMemo(
+    () => stripApproachHeading(extractApproachMarkdown(explanation?.optimized_approach || "", activeSolution?.approach_type || "")),
+    [activeSolution?.approach_type, explanation?.optimized_approach]
+  );
+  const activePitfalls = useMemo(
+    () => stripApproachHeading(extractApproachMarkdown(explanation?.pitfalls || "", activeSolution?.approach_type || "")),
+    [activeSolution?.approach_type, explanation?.pitfalls]
+  );
+  const activeComplexity = useMemo(
+    () => stripApproachHeading(extractApproachMarkdown(explanation?.complexity_analysis || "", activeSolution?.approach_type || "")),
+    [activeSolution?.approach_type, explanation?.complexity_analysis]
   );
   const latestVerification = verificationRuns.at(-1);
   const [running, setRunning] = useState(false);
@@ -85,20 +87,6 @@ export default function ExplanationTabs({
     }
   }
 
-  function handleDownloadIllustration() {
-    if (!activeSolution) {
-      return;
-    }
-    const svg = buildIllustrationSvg(activeSolution, illustrationRows);
-    const blob = new Blob([svg], { type: "image/svg+xml" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${approachLabel(activeSolution.approach_type).toLowerCase().replace(/\s+/g, "-")}-illustration.svg`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
   return (
     <div className="space-y-5">
       <section className="surface p-5">
@@ -106,41 +94,8 @@ export default function ExplanationTabs({
           <div>
             <h2 className="text-lg font-semibold text-zinc-950 dark:text-white">Explanation workspace</h2>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-              Select a solution, inspect the reasoning, run the generated tests, and download the teaching artifacts from one place.
+              Select a solution and learn its foundations, intuition, state, execution flow, code, complexity, and common mistakes from first principles.
             </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={handleDownloadIllustration}
-              disabled={!activeSolution}
-              className="focus-ring inline-flex h-10 items-center gap-2 rounded-md border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
-            >
-              <Download size={15} aria-hidden="true" />
-              Illustration SVG
-            </button>
-            {slide?.pptx_path ? (
-              <a
-                href={slide.pptx_path}
-                target="_blank"
-                rel="noreferrer"
-                className="focus-ring inline-flex h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
-              >
-                <FileDown size={15} aria-hidden="true" />
-                PPTX
-              </a>
-            ) : null}
-            {slide?.html_path ? (
-              <a
-                href={slide.html_path}
-                target="_blank"
-                rel="noreferrer"
-                className="focus-ring inline-flex h-10 items-center gap-2 rounded-md border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
-              >
-                <ExternalLink size={15} aria-hidden="true" />
-                Preview
-              </a>
-            ) : null}
           </div>
         </div>
 
@@ -169,42 +124,47 @@ export default function ExplanationTabs({
         </div>
       </section>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <section className="space-y-5">
-          <section className="surface p-5">
-            <h3 className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">Reasoning</h3>
-            <ReactMarkdown className="markdown-body mt-3">{activeSolution?.explanation || explanation?.intuition || ""}</ReactMarkdown>
-          </section>
+      <section className="surface overflow-hidden">
+        <div className="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
+          <h3 className="flex items-center gap-2 text-base font-semibold text-zinc-950 dark:text-white">
+            <Route size={18} className="text-emerald-500" aria-hidden="true" />
+            Complete explanation: {activeSolution ? approachLabel(activeSolution.approach_type) : "solution"}
+          </h3>
+          <p className="mt-1 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+            One continuous lesson covering foundations, intuition, data structures, code flow, the supplied example, state transitions, pitfalls, and complexity.
+          </p>
+        </div>
+        <div className="space-y-8 p-5">
+          <div>
+            <h4 className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">Foundations and intuition</h4>
+            <ReactMarkdown className="markdown-body mt-3">{activeIntuition || activeSolution?.explanation || ""}</ReactMarkdown>
+          </div>
+          <div className="border-t border-zinc-200 pt-6 dark:border-zinc-800">
+            <h4 className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">Approach and data-structure flow</h4>
+            <ReactMarkdown className="markdown-body mt-3">{activeApproachDetail || activeSolution?.explanation || ""}</ReactMarkdown>
+          </div>
+          <div className="border-t border-zinc-200 pt-6 dark:border-zinc-800">
+            <h4 className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">Annotated code stub</h4>
+            <CodeStub source={activeSolution?.pseudocode || "Read input\nTrack state\nMake decision\nReturn answer"} />
+          </div>
+          <div className="border-t border-zinc-200 pt-6 dark:border-zinc-800">
+            <h4 className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">Given-example execution trace</h4>
+            <WalkthroughContent markdown={activeDryRun || explanation?.dry_run || ""} />
+          </div>
+          <div className="border-t border-zinc-200 pt-6 dark:border-zinc-800">
+            <h4 className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">Pitfalls</h4>
+            <ReactMarkdown className="markdown-body mt-3">{activePitfalls || "Pitfalls will appear when explanation generation completes."}</ReactMarkdown>
+          </div>
+          <div className="border-t border-zinc-200 pt-6 dark:border-zinc-800">
+            <h4 className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">Complexity</h4>
+            <ReactMarkdown className="markdown-body mt-3">
+              {activeComplexity || `${activeSolution?.time_complexity ?? ""}\n\n${activeSolution?.space_complexity ?? ""}`}
+            </ReactMarkdown>
+          </div>
+        </div>
+      </section>
 
-          <section className="surface overflow-hidden">
-            <div className="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
-              <h3 className="flex items-center gap-2 text-base font-semibold text-zinc-950 dark:text-white">
-                <Route size={18} className="text-emerald-500" aria-hidden="true" />
-                Dry run and code logic
-              </h3>
-            </div>
-            <div className="grid gap-5 p-5 lg:grid-cols-[320px_minmax(0,1fr)]">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Logic stub</p>
-                <pre className="mt-2 max-h-[420px] overflow-auto whitespace-pre-wrap rounded-md bg-zinc-950 p-4 font-mono text-xs leading-5 text-zinc-100">
-                  {activeSolution?.pseudocode || "Read input\nTrack state\nMake decision\nReturn answer"}
-                </pre>
-              </div>
-              <ReactMarkdown className="markdown-body min-w-0">{activeDryRun || explanation?.dry_run || ""}</ReactMarkdown>
-            </div>
-          </section>
-
-          <section className="surface overflow-hidden">
-            <div className="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
-              <h3 className="text-base font-semibold text-zinc-950 dark:text-white">Illustration</h3>
-              <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Step-by-step state changes in the same spirit as GFG illustrations.</p>
-            </div>
-            <Illustration rows={illustrationRows} />
-          </section>
-        </section>
-
-        <aside className="space-y-4">
-          <section className="surface p-4">
+      <section className="surface p-4">
             <h3 className="text-sm font-semibold text-zinc-950 dark:text-white">Proof run</h3>
             <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
               Execute the selected solution against every generated test and inspect the aggregate timing.
@@ -234,41 +194,142 @@ export default function ExplanationTabs({
               </div>
             ) : null}
             {runError ? <p className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">{runError}</p> : null}
-          </section>
-
-          <section className="surface p-4">
-            <h3 className="text-sm font-semibold text-zinc-950 dark:text-white">Pitfalls</h3>
-            <ReactMarkdown className="markdown-body mt-3">{explanation?.pitfalls || "Pitfalls will appear when explanation generation completes."}</ReactMarkdown>
-          </section>
-
-          <section className="surface p-4">
-            <h3 className="text-sm font-semibold text-zinc-950 dark:text-white">Complexity</h3>
-            <ReactMarkdown className="markdown-body mt-3">
-              {explanation?.complexity_analysis || `${activeSolution?.time_complexity ?? ""}\n\n${activeSolution?.space_complexity ?? ""}`}
-            </ReactMarkdown>
-          </section>
-        </aside>
-      </div>
+      </section>
     </div>
   );
 }
 
-function Illustration({ rows }: { rows: IllustrationRow[] }) {
+function CodeStub({ source }: { source: string }) {
+  const lines = formatCodeLines(source);
   return (
-    <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-3">
-      {rows.map((row, index) => (
-        <div key={`${row.step}-${index}`} className="min-w-0 overflow-hidden rounded-md border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between gap-3">
-            <span className="font-mono text-xs font-semibold text-emerald-600 dark:text-emerald-300">Step {row.step || index + 1}</span>
-            <span className="rounded-md bg-zinc-950 px-2 py-1 font-mono text-xs text-zinc-100">{row.input || "-"}</span>
-          </div>
-          <p className="mt-3 max-w-full break-all text-sm font-semibold text-zinc-950 [overflow-wrap:anywhere] dark:text-zinc-100">{row.action || "Inspect state"}</p>
-          <p className="mt-2 max-w-full break-all font-mono text-xs leading-5 text-zinc-600 [overflow-wrap:anywhere] dark:text-zinc-400">state: {row.state || "-"}</p>
-          <p className="mt-2 max-w-full break-all text-sm text-zinc-600 [overflow-wrap:anywhere] dark:text-zinc-300">{row.result || "Continue"}</p>
-        </div>
-      ))}
+    <div className="mt-3 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-inner">
+      <div className="flex items-center gap-2 border-b border-zinc-800 bg-zinc-900 px-4 py-2">
+        <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
+        <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
+        <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+        <span className="ml-2 font-mono text-[11px] uppercase tracking-wider text-zinc-500">logic map</span>
+      </div>
+      <ol className="max-h-[560px] overflow-auto py-3">
+        {lines.map((line, index) => (
+          <li key={`${index}-${line}`} className="grid grid-cols-[44px_minmax(0,1fr)] px-3 font-mono text-xs leading-6 text-zinc-100">
+            <span className="select-none border-r border-zinc-800 pr-3 text-right text-zinc-600">{index + 1}</span>
+            <code className="min-w-0 whitespace-pre-wrap break-words pl-4">{line}</code>
+          </li>
+        ))}
+      </ol>
     </div>
   );
+}
+
+function WalkthroughContent({ markdown }: { markdown: string }) {
+  const sections = parseWalkthroughSections(markdown);
+  return (
+    <div className="mt-4 space-y-6">
+      {sections.map((section, index) => {
+        const normalizedTitle = section.title.toLowerCase();
+        return (
+          <section key={`${section.title}-${index}`} className="rounded-lg border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
+            <div className="flex items-center gap-3">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 font-mono text-xs font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                {index + 1}
+              </span>
+              <h5 className="text-sm font-semibold text-zinc-950 dark:text-white">{section.title}</h5>
+            </div>
+            {normalizedTitle.includes("code stub") ? (
+              <CodeStub source={section.body} />
+            ) : normalizedTitle.includes("step-by-step") ? (
+              <ExecutionTable markdown={section.body} />
+            ) : normalizedTitle.includes("state model") ? (
+              <StateModel body={section.body} />
+            ) : (
+              <ReactMarkdown className="markdown-body mt-3">{section.body}</ReactMarkdown>
+            )}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function StateModel({ body }: { body: string }) {
+  const items = body.split(/;|\r?\n/).map((item) => item.trim()).filter(Boolean);
+  return (
+    <dl className="mt-4 grid gap-3 md:grid-cols-2">
+      {items.map((item, index) => {
+        const separator = item.indexOf(":");
+        const name = separator > 0 ? item.slice(0, separator).trim() : `State ${index + 1}`;
+        const meaning = separator > 0 ? item.slice(separator + 1).trim() : item;
+        return (
+          <div key={`${name}-${index}`} className="rounded-md border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-950">
+            <dt className="font-mono text-xs font-semibold text-emerald-700 dark:text-emerald-300">{name}</dt>
+            <dd className="mt-1 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{meaning}</dd>
+          </div>
+        );
+      })}
+    </dl>
+  );
+}
+
+function ExecutionTable({ markdown }: { markdown: string }) {
+  const table = parseExecutionTable(markdown);
+  if (!table) {
+    return <ReactMarkdown className="markdown-body mt-3">{markdown}</ReactMarkdown>;
+  }
+  return (
+    <div className="mt-4 overflow-x-auto rounded-lg border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-950">
+      <table className="min-w-[1180px] border-collapse text-left text-xs">
+        <thead className="sticky top-0 bg-zinc-100 text-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
+          <tr>{table.headers.map((header) => <th key={header} className="border-b border-r border-zinc-200 px-3 py-3 font-semibold last:border-r-0 dark:border-zinc-700">{header}</th>)}</tr>
+        </thead>
+        <tbody>
+          {table.rows.map((row, rowIndex) => (
+            <tr key={rowIndex} className="align-top odd:bg-white even:bg-zinc-50 dark:odd:bg-zinc-950 dark:even:bg-zinc-900/60">
+              {table.headers.map((_, cellIndex) => (
+                <td key={cellIndex} className={`border-b border-r border-zinc-200 px-3 py-3 leading-5 last:border-r-0 dark:border-zinc-800 ${cellIndex === 0 ? "font-mono font-semibold text-emerald-700 dark:text-emerald-300" : "text-zinc-700 dark:text-zinc-300"}`}>
+                  {row[cellIndex] || "—"}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function formatCodeLines(source: string): string[] {
+  const expanded = source
+    .replace(/\s*;\s*/g, ";\n")
+    .replace(/:\s+(?=(?:if|for|while|return|add|remove|recurse|solve|backtrack)\b)/gi, ":\n")
+    .replace(/\)\s+(?=(?:if|for|while|return)\b)/gi, ")\n");
+  const lines = expanded.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  return lines.length ? lines : [source.trim()];
+}
+
+function parseWalkthroughSections(markdown: string): Array<{ title: string; body: string }> {
+  const lines = markdown.split(/\r?\n/);
+  const sections: Array<{ title: string; body: string[] }> = [];
+  for (const line of lines) {
+    const heading = line.match(/^###\s+(.+)$/);
+    if (heading) {
+      sections.push({ title: heading[1].trim(), body: [] });
+    } else if (sections.length) {
+      sections[sections.length - 1].body.push(line);
+    }
+  }
+  if (!sections.length) {
+    return [{ title: "Execution walkthrough", body: markdown.trim() }];
+  }
+  return sections.map((section) => ({ title: section.title, body: section.body.join("\n").trim() }));
+}
+
+function parseExecutionTable(markdown: string): { headers: string[]; rows: string[][] } | null {
+  const lines = markdown.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.startsWith("|"));
+  if (lines.length < 3) return null;
+  const cells = (line: string) => line.replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+  const headers = cells(lines[0]);
+  const rows = lines.slice(2).map(cells).filter((row) => row.some(Boolean));
+  return headers.length && rows.length ? { headers, rows } : null;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
@@ -293,75 +354,24 @@ function extractApproachMarkdown(markdown: string, approachType: string): string
   return match || markdown;
 }
 
-function buildIllustrationRows(markdown: string, solution?: GeneratedSolution): IllustrationRow[] {
-  const tableRows = parseMarkdownTable(markdown);
-  if (tableRows.length) {
-    return tableRows.slice(0, 9);
+function stripApproachHeading(markdown: string): string {
+  return markdown.replace(/^##\s+[^\r\n]+\r?\n+/, "").trim();
+}
+
+function formatWalkthroughMarkdown(markdown: string): string {
+  const content = stripApproachHeading(markdown);
+  if (!content.startsWith("{") || !content.endsWith("}")) {
+    return content;
   }
-  const lines = (solution?.pseudocode || "")
-    .split(/\r?\n/)
-    .map((line) => line.replace(/^\d+[.)]\s*/, "").trim())
-    .filter(Boolean)
-    .slice(0, 6);
-  const sourceLines = lines.length ? lines : ["Read input", "Initialize state", "Process each item", "Return answer"];
-  return sourceLines.map((line, index) => ({
-    step: String(index + 1),
-    input: index === 0 ? "input" : "",
-    state: index === 0 ? "empty" : "updated",
-    action: line,
-    result: index === sourceLines.length - 1 ? "answer ready" : "continue"
-  }));
-}
-
-function parseMarkdownTable(markdown: string): IllustrationRow[] {
-  const lines = markdown.split(/\r?\n/).filter((line) => line.trim().startsWith("|"));
-  if (lines.length < 2) {
-    return [];
+  try {
+    const parsed = JSON.parse(content) as Record<string, unknown>;
+    return Object.entries(parsed)
+      .filter(([, value]) => typeof value === "string" && value.trim())
+      .map(([heading, value]) => `${heading.startsWith("#") ? heading : `### ${heading}`}\n\n${String(value).trim()}`)
+      .join("\n\n");
+  } catch {
+    return content;
   }
-  const rows = lines
-    .filter((line) => !/^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(line.trim()))
-    .map((line) =>
-      line
-        .replace(/^\|/, "")
-        .replace(/\|$/, "")
-        .split("|")
-        .map((cell) => cell.trim())
-    );
-  const body = rows.slice(1);
-  return body.map((row, index) => ({
-    step: row[0] || String(index + 1),
-    input: row[1] || "",
-    state: row[2] || "",
-    action: row[3] || "",
-    result: row[4] || ""
-  }));
-}
-
-function buildIllustrationSvg(solution: GeneratedSolution, rows: IllustrationRow[]): string {
-  const width = 1180;
-  const rowHeight = 92;
-  const height = 130 + Math.max(rows.length, 1) * rowHeight;
-  const cards = rows
-    .map((row, index) => {
-      const y = 96 + index * rowHeight;
-      return `<g>
-  <rect x="36" y="${y}" width="1108" height="72" rx="10" fill="${index % 2 === 0 ? "#ecfdf5" : "#eff6ff"}" stroke="#d4d4d8"/>
-  <text x="58" y="${y + 27}" font-family="Consolas, monospace" font-size="16" fill="#047857">Step ${escapeSvg(row.step || String(index + 1))}</text>
-  <text x="190" y="${y + 27}" font-family="Inter, Arial" font-size="16" fill="#18181b">${escapeSvg(row.action || "Inspect state")}</text>
-  <text x="190" y="${y + 52}" font-family="Consolas, monospace" font-size="14" fill="#52525b">input=${escapeSvg(row.input || "-")} | state=${escapeSvg(row.state || "-")} | result=${escapeSvg(row.result || "-")}</text>
-</g>`;
-    })
-    .join("\n");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-  <rect width="100%" height="100%" fill="#fafafa"/>
-  <text x="36" y="44" font-family="Inter, Arial" font-size="28" font-weight="700" fill="#18181b">${escapeSvg(approachLabel(solution.approach_type))} Illustration</text>
-  <text x="36" y="74" font-family="Consolas, monospace" font-size="16" fill="#52525b">${escapeSvg(solution.algorithm_pattern)} - ${escapeSvg(solution.time_complexity)} time / ${escapeSvg(solution.space_complexity)} space</text>
-  ${cards}
-</svg>`;
-}
-
-function escapeSvg(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
 
 function orderSolutions(solutions: GeneratedSolution[]): GeneratedSolution[] {

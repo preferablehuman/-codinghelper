@@ -12,7 +12,6 @@ The default project runs as seven Docker Compose services, with Ollama available
 - `postgres`: relational state for jobs, results, metadata, history
 - `qdrant`: vector database for source chunks and semantic retrieval
 - `sandbox-runner`: isolated Python and Java code execution
-- `slide-renderer`: markdown, HTML preview, and PowerPoint deck artifact generation
 - `ollama` (optional): local GGUF model serving when the gateway is configured for Ollama
 
 PostgreSQL is the application source of truth. Qdrant stores embeddings. The backend orchestrates jobs but has no Gemini/Ollama knowledge; all LLM calls cross the model-gateway API. Generated code only runs in `sandbox-runner`.
@@ -29,9 +28,8 @@ All persistent container data is directed into `./data`:
 - `data/ollama`: persistent Ollama model store
 - `data/frontend/node_modules` and `data/frontend/npm-cache`: frontend dependency/runtime cache
 - `data/sandbox-runner/work`: temporary generated-code execution work area, cleaned per run
-- `data/slide-renderer/generated-slides`, `data/slide-renderer/node_modules`, and `data/slide-renderer/npm-cache`: slide artifacts and Node cache
 
-The code for `frontend`, `backend`, `model-gateway`, `sandbox-runner`, and `slide-renderer` is bind-mounted into their containers. Python services run with reload enabled, and Node services install dependencies into `./data/...` at startup.
+The code for `frontend`, `backend`, `model-gateway`, and `sandbox-runner` is bind-mounted into their containers. Python services run with reload enabled.
 
 ## Quick Start
 
@@ -47,7 +45,6 @@ After the first build, code changes can usually be picked up with:
 docker compose restart backend
 docker compose restart model-gateway
 docker compose restart sandbox-runner
-docker compose restart slide-renderer
 docker compose restart frontend
 ```
 
@@ -57,7 +54,6 @@ Open:
 - Backend health: http://localhost:8000/api/health
 - Model gateway: internal-only at `http://model-gateway:8300`; inspect readiness through backend `/api/health`
 - Sandbox health: http://localhost:8100/health
-- Slide renderer health: http://localhost:8200/health
 - Qdrant: http://localhost:6333
 
 ## Developer Commands
@@ -85,7 +81,6 @@ Every service writes logs to the console and to `./logs/<service>/` on the host:
 - `logs/qdrant/qdrant.log`
 - `logs/sandbox-runner/sandbox-runner.log`
 - `logs/sandbox-runner/sandbox-runner-console.log`
-- `logs/slide-renderer/slide-renderer.log`
 
 File logs rotate at `LOG_MAX_BYTES=10485760` and keep `LOG_MAX_FILES=10` files total by default. Docker console logs are also capped at 10 files of 10 MB per service.
 

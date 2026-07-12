@@ -1,7 +1,8 @@
 import json
+import pytest
 
 from app.model_runtime.base import BaseModelRuntime
-from app.solver.code_generator import _solutions_are_too_similar, generate_solution_variants
+from app.solver.code_generator import _normalize_generated_text, _solutions_are_too_similar, generate_solution_variants
 
 
 class FakeRuntime(BaseModelRuntime):
@@ -132,3 +133,22 @@ def test_same_code_is_duplicate_even_when_explanation_and_complexity_claims_diff
     }
 
     assert _solutions_are_too_similar(left, right)
+
+
+def test_normalize_generated_text_collapses_whitespace() -> None:
+    value = _normalize_generated_text(
+        "O(n)   because\n each element is visited once.",
+        field_name="time_complexity",
+        max_length=1_000,
+    )
+    assert value == "O(n) because each element is visited once."
+
+
+def test_normalize_generated_text_bounds_excessive_content() -> None:
+    value = _normalize_generated_text("x" * 2_000, field_name="time_complexity", max_length=1_000)
+    assert len(value) == 1_000
+
+
+def test_normalize_generated_text_rejects_blank_content() -> None:
+    with pytest.raises(ValueError):
+        _normalize_generated_text("   ", field_name="algorithm_pattern", max_length=300)

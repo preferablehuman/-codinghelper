@@ -9,6 +9,23 @@ from app.model_runtime.prompts import repair_prompt, solution_prompt, solution_v
 
 logger = logging.getLogger(__name__)
 APPROACH_ORDER = {"BRUTE_FORCE": 0, "IMPROVED": 1, "AVERAGE": 1, "OPTIMAL": 2, "EXPECTED": 2, "FINAL": 2}
+MAX_ALGORITHM_PATTERN_LENGTH = 300
+MAX_COMPLEXITY_DESCRIPTION_LENGTH = 1_000
+
+
+def _normalize_generated_text(value: str, *, field_name: str, max_length: int) -> str:
+    normalized = " ".join(value.split())
+    if not normalized:
+        raise ValueError(f"Generated field {field_name!r} cannot be blank.")
+    if len(normalized) > max_length:
+        logger.warning(
+            "Generated field exceeded expected length field=%s chars=%s max_chars=%s",
+            field_name,
+            len(normalized),
+            max_length,
+        )
+        normalized = normalized[:max_length].rstrip()
+    return normalized
 
 
 def generate_solution(
@@ -234,17 +251,32 @@ def _normalize_solution_payload(
         defaults_used.append(key)
         return default
 
+    algorithm_pattern = _normalize_generated_text(
+        field("algorithm_pattern", fallback_pattern),
+        field_name="algorithm_pattern",
+        max_length=MAX_ALGORITHM_PATTERN_LENGTH,
+    )
+    time_complexity = _normalize_generated_text(
+        field("time_complexity", (previous_solution or {}).get("time_complexity", "Not specified.")),
+        field_name="time_complexity",
+        max_length=MAX_COMPLEXITY_DESCRIPTION_LENGTH,
+    )
+    space_complexity = _normalize_generated_text(
+        field("space_complexity", (previous_solution or {}).get("space_complexity", "Not specified.")),
+        field_name="space_complexity",
+        max_length=MAX_COMPLEXITY_DESCRIPTION_LENGTH,
+    )
     result = {
         "approach_type": _normalize_approach_type(field("approach_type", "FINAL")),
-        "algorithm_pattern": field("algorithm_pattern", fallback_pattern),
+        "algorithm_pattern": algorithm_pattern,
         "explanation": field(
             "explanation",
             (previous_solution or {}).get("explanation", "Generated solution for the programming problem."),
         ),
         "pseudocode": field("pseudocode", _fallback_pseudocode(fallback_pattern)),
         "code": code,
-        "time_complexity": field("time_complexity", (previous_solution or {}).get("time_complexity", "Not specified.")),
-        "space_complexity": field("space_complexity", (previous_solution or {}).get("space_complexity", "Not specified.")),
+        "time_complexity": time_complexity,
+        "space_complexity": space_complexity,
     }
     if defaults_used:
         logger.warning("Solution payload missing optional fields; defaults used fields=%s", defaults_used)

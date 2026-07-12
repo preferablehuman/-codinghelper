@@ -16,6 +16,34 @@ def build_explanation(
     evidence: str,
     verification: dict[str, object],
 ) -> dict[str, str]:
+    raw_ladder = solution.get("approach_ladder")
+    ladder = [item for item in raw_ladder if isinstance(item, dict)] if isinstance(raw_ladder, list) else []
+    if not ladder:
+        ladder = [solution]
+    if len(ladder) == 1 and not ladder[0].get("approach_type"):
+        return _build_single_explanation(runtime, problem_summary, pattern, ladder[0], evidence, verification)
+    sections: dict[str, list[str]] = {
+        "intuition": [], "brute_force": [], "optimized_approach": [],
+        "dry_run": [], "pitfalls": [], "complexity_analysis": [],
+    }
+    for approach in ladder:
+        approach_type = str(approach.get("approach_type") or "SOLUTION").upper()
+        detail = _build_single_explanation(runtime, problem_summary, pattern, approach, evidence, verification)
+        for key in sections:
+            sections[key].append(f"## {approach_type}\n\n{detail[key]}")
+    result = {key: "\n\n".join(values) for key, values in sections.items()}
+    logger.info("Generated beginner explanations approach_count=%s", len(ladder))
+    return result
+
+
+def _build_single_explanation(
+    runtime: BaseModelRuntime,
+    problem_summary: str,
+    pattern: str,
+    solution: dict[str, object],
+    evidence: str,
+    verification: dict[str, object],
+) -> dict[str, str]:
     logger.info(
         "Generating explanation pattern=%s solution_code_chars=%s verification_status=%s",
         pattern,
@@ -32,7 +60,7 @@ def build_explanation(
 
 Your previous response was truncated or malformed. Return exactly one complete JSON object with all six requested fields. Shorten the prose and use compact dry-run tables so the JSON closes within the output limit. Do not wrap the object in an array or Markdown fence.
 """
-        raw = runtime.generate(prompt, max_new_tokens=8192, json_mode=True, schema_name="explanation")
+        raw = runtime.generate(prompt, max_new_tokens=12288, json_mode=True, schema_name="explanation")
         try:
             data = parse_json_object(raw, wrapper_keys=("explanation", "result", "data"))
             break

@@ -107,12 +107,12 @@ class GeneratedSolution(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
     job_id: Mapped[str] = mapped_column(String(36), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False)
     approach_type: Mapped[str] = mapped_column(String(40), nullable=False)
-    algorithm_pattern: Mapped[str] = mapped_column(String(120), nullable=False)
+    algorithm_pattern: Mapped[str] = mapped_column(Text, nullable=False)
     explanation: Mapped[str] = mapped_column(Text, nullable=False)
     pseudocode: Mapped[str] = mapped_column(Text, nullable=False)
     code: Mapped[str] = mapped_column(Text, nullable=False)
-    time_complexity: Mapped[str] = mapped_column(String(120), nullable=False)
-    space_complexity: Mapped[str] = mapped_column(String(120), nullable=False)
+    time_complexity: Mapped[str] = mapped_column(Text, nullable=False)
+    space_complexity: Mapped[str] = mapped_column(Text, nullable=False)
     verification_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
@@ -195,6 +195,12 @@ class CanonicalProblem(Base):
         UniqueConstraint("statement_hash", name="uq_canonical_problem_statement_hash"),
         UniqueConstraint("source_platform", "source_problem_id", name="uq_canonical_problem_source_identity"),
         Index("ix_canonical_problems_statement_hash", "statement_hash"),
+        Index(
+            "ix_canonical_problems_normalized_trgm",
+            "normalized_statement",
+            postgresql_using="gin",
+            postgresql_ops={"normalized_statement": "gin_trgm_ops"},
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
@@ -220,6 +226,12 @@ class ProblemVariant(Base):
     __table_args__ = (
         UniqueConstraint("canonical_problem_id", "statement_hash", name="uq_problem_variant_hash"),
         Index("ix_problem_variants_statement_hash", "statement_hash"),
+        Index(
+            "ix_problem_variants_normalized_trgm",
+            "normalized_statement",
+            postgresql_using="gin",
+            postgresql_ops={"normalized_statement": "gin_trgm_ops"},
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
@@ -244,13 +256,13 @@ class ReusableSolution(Base):
     canonical_problem_id: Mapped[str] = mapped_column(String(36), ForeignKey("canonical_problems.id", ondelete="CASCADE"), nullable=False)
     language: Mapped[str] = mapped_column(String(40), nullable=False)
     approach_type: Mapped[str] = mapped_column(String(40), nullable=False)
-    algorithm_pattern: Mapped[str] = mapped_column(String(120), nullable=False)
+    algorithm_pattern: Mapped[str] = mapped_column(Text, nullable=False)
     explanation: Mapped[str] = mapped_column(Text, nullable=False)
     pseudocode: Mapped[str] = mapped_column(Text, nullable=False)
     code: Mapped[str] = mapped_column(Text, nullable=False)
     code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    time_complexity: Mapped[str] = mapped_column(String(120), nullable=False)
-    space_complexity: Mapped[str] = mapped_column(String(120), nullable=False)
+    time_complexity: Mapped[str] = mapped_column(Text, nullable=False)
+    space_complexity: Mapped[str] = mapped_column(Text, nullable=False)
     input_contract_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     verification_status: Mapped[str] = mapped_column(String(30), nullable=False, default="UNVERIFIED")
     verification_confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
