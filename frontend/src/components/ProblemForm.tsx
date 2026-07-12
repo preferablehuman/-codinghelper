@@ -1,5 +1,5 @@
-import { ArrowRight, Braces, FileCode2, Gauge, Keyboard, LoaderCircle } from "lucide-react";
-import { FormEvent, KeyboardEvent, useState } from "react";
+import { Braces, FileCode2, Keyboard } from "lucide-react";
+import { FormEvent, KeyboardEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { createJob } from "../api/client";
@@ -8,20 +8,33 @@ const languages = [
   { id: "java", label: "Java", note: "JDK 17" },
   { id: "python", label: "Python", note: "3.11" }
 ];
-const difficulties = ["easy", "medium", "hard"];
 
-export default function ProblemForm() {
+export interface ProblemFormState {
+  submitting: boolean;
+  canSubmit: boolean;
+}
+
+interface ProblemFormProps {
+  formId?: string;
+  onStateChange?: (state: ProblemFormState) => void;
+}
+
+export default function ProblemForm({ formId = "problem-form", onStateChange }: ProblemFormProps) {
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [problemText, setProblemText] = useState("");
   const [language, setLanguage] = useState("java");
-  const [difficulty, setDifficulty] = useState("easy");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const canSubmit = !submitting && problemText.trim().length >= 10;
+
+  useEffect(() => {
+    onStateChange?.({ submitting, canSubmit });
+  }, [canSubmit, onStateChange, submitting]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting) return;
+    if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -29,7 +42,6 @@ export default function ProblemForm() {
         title: title.trim() || undefined,
         problem_text: problemText,
         language,
-        difficulty,
         source_urls: []
       });
       navigate(`/jobs/${created.job_id}`);
@@ -48,7 +60,7 @@ export default function ProblemForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} onKeyDown={handleKeyboardSubmit} className="space-y-7">
+    <form id={formId} onSubmit={handleSubmit} onKeyDown={handleKeyboardSubmit} className="space-y-7">
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-zinc-200 pb-5 dark:border-zinc-800">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400">New session</p>
@@ -99,60 +111,29 @@ export default function ProblemForm() {
         </div>
       </label>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <fieldset>
-          <legend className="flex items-center gap-2 text-sm font-semibold text-zinc-800 dark:text-zinc-200"><Braces size={16} aria-hidden="true" />Language</legend>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            {languages.map((item) => {
-              const selected = language === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  aria-pressed={selected}
-                  onClick={() => setLanguage(item.id)}
-                  className={`focus-ring rounded-xl border p-3 text-left transition ${selected ? "border-emerald-500 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100" : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300"}`}
-                >
-                  <span className="block text-sm font-semibold">{item.label}</span>
-                  <span className="mt-1 block font-mono text-xs opacity-60">{item.note}</span>
-                </button>
-              );
-            })}
-          </div>
-        </fieldset>
+      <fieldset>
+        <legend className="flex items-center gap-2 text-sm font-semibold text-zinc-800 dark:text-zinc-200"><Braces size={16} aria-hidden="true" />Language</legend>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {languages.map((item) => {
+            const selected = language === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => setLanguage(item.id)}
+                className={`focus-ring rounded-xl border p-3 text-left transition ${selected ? "border-emerald-500 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100" : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300"}`}
+              >
+                <span className="block text-sm font-semibold">{item.label}</span>
+                <span className="mt-1 block font-mono text-xs opacity-60">{item.note}</span>
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
 
-        <fieldset>
-          <legend className="flex items-center gap-2 text-sm font-semibold text-zinc-800 dark:text-zinc-200"><Gauge size={16} aria-hidden="true" />Difficulty</legend>
-          <div className="mt-2 grid grid-cols-3 gap-2">
-            {difficulties.map((item) => {
-              const selected = difficulty === item;
-              return (
-                <button
-                  key={item}
-                  type="button"
-                  aria-pressed={selected}
-                  onClick={() => setDifficulty(item)}
-                  className={`focus-ring h-[66px] rounded-xl border text-sm font-semibold capitalize transition ${selected ? "border-zinc-950 bg-zinc-950 text-white dark:border-white dark:bg-white dark:text-zinc-950" : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300"}`}
-                >
-                  {item}
-                </button>
-              );
-            })}
-          </div>
-        </fieldset>
-      </div>
-
-      <div className="flex flex-col gap-3 border-t border-zinc-200 pt-5 sm:flex-row sm:items-center sm:justify-between dark:border-zinc-800">
-        <p className="max-w-lg text-xs leading-5 text-zinc-500 dark:text-zinc-400">The pipeline retrieves evidence, generates distinct approaches, runs tests, and repairs the optimal implementation when needed.</p>
-        <button
-          type="submit"
-          disabled={submitting || problemText.trim().length < 10}
-          className="focus-ring inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white shadow-lg shadow-emerald-900/15 transition hover:-translate-y-0.5 hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-500 disabled:shadow-none disabled:hover:translate-y-0 dark:disabled:bg-zinc-800"
-        >
-          {submitting ? <LoaderCircle size={17} className="animate-spin" aria-hidden="true" /> : null}
-          {submitting ? "Starting analysis…" : "Generate solution ladder"}
-          {!submitting ? <ArrowRight size={17} aria-hidden="true" /> : null}
-        </button>
+      <div className="border-t border-zinc-200 pt-5 dark:border-zinc-800">
+        <p className="max-w-2xl text-xs leading-5 text-zinc-500 dark:text-zinc-400">Every problem is analyzed from its statement and constraints. The pipeline retrieves evidence, generates distinct approaches, runs tests, and repairs the optimal implementation when needed.</p>
       </div>
     </form>
   );

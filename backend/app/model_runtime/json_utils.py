@@ -3,7 +3,7 @@ from typing import Any
 
 
 def parse_json_object(text: str, *, wrapper_keys: tuple[str, ...] = ()) -> dict[str, Any]:
-    value = _parse_first_json_value(text)
+    value = _parse_first_json_value(text, opening_chars="{")
     value = _unwrap_single_object(value)
     if isinstance(value, dict):
         for key in wrapper_keys:
@@ -16,7 +16,7 @@ def parse_json_object(text: str, *, wrapper_keys: tuple[str, ...] = ()) -> dict[
 
 
 def parse_json_array(text: str) -> list[Any]:
-    value = _parse_first_json_value(text)
+    value = _parse_first_json_value(text, opening_chars="[")
     if not isinstance(value, list):
         raise ValueError(f"Model response must contain a JSON array, got {type(value).__name__}.")
     return value
@@ -40,11 +40,17 @@ def optional_string(data: dict[str, Any], key: str) -> str | None:
     return str(value).strip()
 
 
-def _parse_first_json_value(text: str) -> Any:
+def _parse_first_json_value(text: str, *, opening_chars: str = "[{") -> Any:
     decoder = json.JSONDecoder()
     stripped = text.strip()
+    if stripped and stripped[0] in opening_chars:
+        try:
+            value, _ = decoder.raw_decode(stripped)
+            return value
+        except json.JSONDecodeError as exc:
+            raise ValueError("Model response started with incomplete or invalid JSON.") from exc
     for index, char in enumerate(stripped):
-        if char not in "[{":
+        if char not in opening_chars:
             continue
         try:
             value, _ = decoder.raw_decode(stripped[index:])

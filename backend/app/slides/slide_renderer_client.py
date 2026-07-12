@@ -9,7 +9,7 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 
-def render_slides(job_id: str, markdown: str) -> dict[str, str | None]:
+def render_slides(job_id: str, markdown: str, deck: dict[str, object] | None = None) -> dict[str, str | None]:
     settings = get_settings()
     try:
         started = time.perf_counter()
@@ -21,7 +21,7 @@ def render_slides(job_id: str, markdown: str) -> dict[str, str | None]:
         )
         response = httpx.post(
             f"{settings.slide_renderer_url}/render",
-            json={"job_id": job_id, "markdown": markdown, "formats": ["html", "pptx"]},
+            json={"job_id": job_id, "markdown": markdown, "deck": deck, "formats": ["html", "pptx"]},
             timeout=60,
         )
         response.raise_for_status()

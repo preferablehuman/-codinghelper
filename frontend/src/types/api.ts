@@ -16,7 +16,6 @@ export interface JobCreate {
   title?: string;
   problem_text: string;
   language: string;
-  difficulty?: string;
   source_urls: string[];
 }
 

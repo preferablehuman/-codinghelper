@@ -50,37 +50,47 @@ def generate_solution_variants(
     )
     variants: list[dict[str, str]] = []
     for approach_type in ("BRUTE_FORCE", "IMPROVED", "OPTIMAL"):
-        prompt = solution_variant_prompt(
-            problem_text,
-            language,
-            pattern,
-            evidence,
-            approach_type,
-            variants,
-        )
         raw = ""
-        try:
-            raw = runtime.generate(prompt, max_new_tokens=4096, json_mode=True)
-            item = parse_json_object(raw)
-            normalized = _normalize_solution_payload(item, pattern, language=language)
-            normalized["approach_type"] = approach_type
-            variants.append(normalized)
-        except ValueError as exc:
-            if approach_type == "IMPROVED":
+        last_error: ValueError | None = None
+        for attempt in range(1, 3):
+            prompt = solution_variant_prompt(
+                problem_text,
+                language,
+                pattern,
+                evidence,
+                approach_type,
+                variants,
+            )
+            if attempt > 1:
+                prompt += """
+
+The previous candidate was invalid, truncated, or duplicated an earlier implementation. Generate a genuinely different algorithm, data structure, state representation, or control flow. Similar high-level intuition is acceptable when the implementation approach is distinct. Keep the explanation and pseudocode compact, keep the code complete, and return one complete JSON object only.
+"""
+            try:
+                raw = runtime.generate(prompt, max_new_tokens=8192, json_mode=True)
+                item = parse_json_object(raw)
+                normalized = _normalize_solution_payload(item, pattern, language=language)
+                normalized["approach_type"] = approach_type
+                if any(_solutions_are_too_similar(normalized, existing) for existing in variants):
+                    raise ValueError("Generated approach duplicates an earlier implementation.")
+                variants.append(normalized)
+                last_error = None
+                break
+            except ValueError as exc:
+                last_error = exc
                 logger.warning(
-                    "Skipping invalid optional solution variant approach_type=%s error=%s response_preview=%s",
+                    "Solution variant attempt rejected approach_type=%s attempt=%s error=%s response_preview=%s",
                     approach_type,
+                    attempt,
                     exc,
                     response_preview(raw),
                 )
+        if last_error is not None:
+            if approach_type == "IMPROVED":
+                logger.warning("Skipping optional solution variant after retries approach_type=%s error=%s", approach_type, last_error)
                 continue
-            logger.error(
-                "Required solution variant failed approach_type=%s error=%s response_preview=%s",
-                approach_type,
-                exc,
-                response_preview(raw),
-            )
-            raise
+            logger.error("Required solution variant failed after retries approach_type=%s error=%s", approach_type, last_error)
+            raise last_error
 
     deduped = _dedupe_and_order_variants(variants)
     present_types = {variant["approach_type"] for variant in deduped}
@@ -151,20 +161,10 @@ def _dedupe_and_order_variants(variants: list[dict[str, str]]) -> list[dict[str,
 
 
 def _remove_similar_variants(variants: list[dict[str, str]]) -> list[dict[str, str]]:
-    if len(variants) <= 2:
-        return variants
-
-    required = {
-        variants[0].get("approach_type", ""),
-        (select_primary_solution(variants).get("approach_type", "") if variants else ""),
-    }
     kept: list[dict[str, str]] = []
     skipped: list[str] = []
     for variant in variants:
         approach = variant.get("approach_type", "")
-        if approach in required:
-            kept.append(variant)
-            continue
         if any(_solutions_are_too_similar(variant, existing) for existing in kept):
             skipped.append(approach)
             continue
@@ -183,15 +183,38 @@ def _solutions_are_too_similar(left: dict[str, str], right: dict[str, str]) -> b
     left_code = _code_fingerprint(left.get("code", ""))
     right_code = _code_fingerprint(right.get("code", ""))
     if not left_code or not right_code:
-        return same_complexity
-    similarity = SequenceMatcher(None, left_code, right_code).ratio()
-    return same_complexity and similarity >= 0.9
+        return False
+    if left_code == right_code:
+        return True
+
+    code_similarity = SequenceMatcher(None, left_code, right_code).ratio()
+    if same_complexity and code_similarity >= 0.94:
+        return True
+
+    pseudocode_similarity = _token_similarity(left.get("pseudocode", ""), right.get("pseudocode", ""))
+    if same_complexity and code_similarity >= 0.82 and pseudocode_similarity >= 0.82:
+        return True
+
+    same_pattern = _normalized_text(left.get("algorithm_pattern", "")) == _normalized_text(right.get("algorithm_pattern", ""))
+    return same_pattern and code_similarity >= 0.75 and pseudocode_similarity >= 0.9
 
 
 def _code_fingerprint(code: str) -> str:
     code = re.sub(r"//.*?$|/\*.*?\*/|#.*?$", "", code, flags=re.MULTILINE | re.DOTALL)
     code = re.sub(r"\s+", "", code)
     return code.lower()
+
+
+def _token_similarity(left: str, right: str) -> float:
+    left_tokens = set(re.findall(r"[a-z0-9]+", left.lower()))
+    right_tokens = set(re.findall(r"[a-z0-9]+", right.lower()))
+    if not left_tokens or not right_tokens:
+        return 0.0
+    return len(left_tokens & right_tokens) / len(left_tokens | right_tokens)
+
+
+def _normalized_text(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
 
 
 def _normalize_solution_payload(

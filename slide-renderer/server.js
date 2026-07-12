@@ -1,6 +1,7 @@
 import http from "node:http";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import pptxgen from "pptxgenjs";
 
 const PORT = Number(process.env.PORT || 8200);
@@ -61,6 +62,8 @@ function stripMarkdown(value) {
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/^#{1,6}\s+/g, "")
     .replace(/[*_~`]/g, "")
+    .replaceAll("×", "x")
+    .replaceAll("→", "->")
     .trim();
 }
 
@@ -164,15 +167,43 @@ function parseSlide(section, index) {
   };
 }
 
-function parseDeck(markdown) {
+function normalizeStructuredSlide(item, index) {
+  const table = item?.table && typeof item.table === "object" ? item.table : {};
+  const headers = Array.isArray(table.headers) ? table.headers.map((cell) => truncate(cell, 42)).slice(0, 6) : [];
+  const rows = Array.isArray(table.rows)
+    ? table.rows.filter(Array.isArray).slice(0, 8).map((row) => row.slice(0, headers.length || 6).map((cell) => truncate(cell, 64)))
+    : [];
+  return {
+    kind: String(item?.kind || (index === 0 ? "title" : "approach")).toLowerCase(),
+    title: truncate(item?.title || `Slide ${index + 1}`, 90),
+    takeaway: truncate(item?.takeaway || "", 260),
+    bullets: Array.isArray(item?.bullets) ? item.bullets.map((bullet) => truncate(bullet, 180)).filter(Boolean).slice(0, 5) : [],
+    flow: Array.isArray(item?.flow) ? item.flow.map((label) => truncate(label, 55)).filter(Boolean).slice(0, 5) : [],
+    code: String(item?.code || "").trim(),
+    table: headers.length ? [headers, ...rows] : [],
+    notes: String(item?.notes || "").trim(),
+    raw: ""
+  };
+}
+
+function parseDeck(markdown, structuredDeck = null) {
+  if (structuredDeck && Array.isArray(structuredDeck.slides)) {
+    const slides = structuredDeck.slides.map(normalizeStructuredSlide).filter((slide) => slide.title);
+    if (slides.length) {
+      return slides.slice(0, 16);
+    }
+  }
   const slides = splitMarkdownSlides(markdown).map(parseSlide).filter((slide) => slide.title || slide.bullets.length || slide.code);
   if (!slides.length) {
     return [{ title: "Study Buddy Slides", bullets: ["No slide content was generated."], code: "", table: [], raw: "" }];
   }
-  return slides.slice(0, 12);
+  return slides.slice(0, 16);
 }
 
 function slideKind(slide, index) {
+  if (slide.kind) {
+    return slide.kind;
+  }
   const text = `${slide.title} ${slide.bullets.join(" ")}`.toLowerCase();
   if (text.includes("dry") || text.includes("trace") || slide.table.length) {
     return "dry-run";
@@ -202,9 +233,9 @@ function addBaseSlide(pptx, slide, slideModel, index, total) {
     x: 0.95,
     y: 0.27,
     w: 10.8,
-    h: 0.62,
+    h: 0.72,
     fontFace: "Aptos Display",
-    fontSize: 26,
+    fontSize: 35,
     bold: true,
     color: COLORS.ink,
     margin: 0,
@@ -221,6 +252,44 @@ function addBaseSlide(pptx, slide, slideModel, index, total) {
     margin: 0
   });
   return accent;
+}
+
+function addTitleSlide(pptx, slide, slideModel, index, total) {
+  slide.background = { color: COLORS.codeBg };
+  slide.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 0.28, h: 7.5, fill: { color: COLORS.teal }, line: { color: COLORS.teal } });
+  slide.addText(slideModel.title, {
+    x: 0.95, y: 1.35, w: 11.2, h: 1.55, fontFace: "Aptos Display", fontSize: 50, bold: true,
+    color: "FFFFFF", margin: 0, fit: "shrink", breakLine: false
+  });
+  if (slideModel.takeaway) {
+    slide.addText(slideModel.takeaway, {
+      x: 0.98, y: 3.15, w: 10.7, h: 1.15, fontFace: "Aptos", fontSize: 24,
+      color: "CBD5E1", margin: 0, fit: "shrink", breakLine: false
+    });
+  }
+  const objective = slideModel.bullets[0] || "Understand the idea, trace the state, and implement the verified solution.";
+  slide.addText(objective, {
+    x: 0.98, y: 5.35, w: 9.8, h: 0.7, fontSize: 18, color: "99F6E4", bold: true, margin: 0, fit: "shrink"
+  });
+  slide.addText(`Study Buddy  ${index + 1}/${total}`, { x: 10.95, y: 7.05, w: 1.75, h: 0.24, fontSize: 9, color: "94A3B8", align: "right", margin: 0 });
+}
+
+function addTakeaway(pptx, slide, text, accent) {
+  if (!text) return;
+  slide.addShape(pptx.ShapeType.line, { x: 0.96, y: 1.22, w: 0.55, h: 0, line: { color: accent, width: 3 } });
+  slide.addText(text, {
+    x: 1.65, y: 1.04, w: 10.45, h: 0.62, fontFace: "Aptos", fontSize: 19, bold: true,
+    color: COLORS.muted, margin: 0, fit: "shrink", breakLine: false
+  });
+}
+
+function addBulletList(slide, bullets, { x = 0.95, y = 1.85, w = 5.5, h = 4.65, fontSize = 18 } = {}) {
+  const items = (bullets.length ? bullets : ["Follow the state, decision, and update at each step."]).slice(0, 5);
+  const runs = [];
+  items.forEach((item, index) => {
+    runs.push({ text: item, options: { bullet: { indent: 18 }, breakLine: true, paraSpaceAfterPt: index === items.length - 1 ? 0 : 12 } });
+  });
+  slide.addText(runs, { x, y, w, h, fontFace: "Aptos", fontSize, color: COLORS.ink, margin: 0.03, valign: "top", breakLine: false, fit: "shrink" });
 }
 
 function addBulletPanel(pptx, slide, bullets, options = {}) {
@@ -259,14 +328,16 @@ function addBulletPanel(pptx, slide, bullets, options = {}) {
 
 function addFlowGraphic(pptx, slide, bullets, y = 5.85) {
   const labels = (bullets.length ? bullets : ["Read input", "Track state", "Make decision", "Return answer"])
-    .slice(0, 4)
+    .slice(0, 5)
     .map((label) => truncate(label, 32));
-  const xValues = [0.95, 3.75, 6.55, 9.35];
+  const itemWidth = labels.length === 5 ? 2.05 : 2.35;
+  const gap = labels.length === 5 ? 0.43 : 0.65;
+  const xValues = labels.map((_, index) => 0.95 + index * (itemWidth + gap));
   labels.forEach((label, idx) => {
     slide.addShape(pptx.ShapeType.roundRect, {
       x: xValues[idx],
       y,
-      w: 2.15,
+      w: itemWidth,
       h: 0.72,
       rectRadius: 0.08,
       fill: { color: idx % 2 === 0 ? "ECFEFF" : "EFF6FF" },
@@ -275,9 +346,9 @@ function addFlowGraphic(pptx, slide, bullets, y = 5.85) {
     slide.addText(label, {
       x: xValues[idx] + 0.13,
       y: y + 0.16,
-      w: 1.89,
+      w: itemWidth - 0.26,
       h: 0.32,
-      fontSize: 11,
+      fontSize: 13,
       bold: true,
       color: COLORS.ink,
       align: "center",
@@ -285,7 +356,7 @@ function addFlowGraphic(pptx, slide, bullets, y = 5.85) {
       fit: "shrink"
     });
     if (idx < labels.length - 1) {
-      slide.addText(">", { x: xValues[idx] + 2.25, y: y + 0.2, w: 0.35, h: 0.26, fontSize: 16, bold: true, color: COLORS.muted, margin: 0 });
+      slide.addText("›", { x: xValues[idx] + itemWidth + 0.08, y: y + 0.16, w: 0.28, h: 0.32, fontSize: 20, bold: true, color: COLORS.muted, margin: 0 });
     }
   });
 }
@@ -371,7 +442,7 @@ function addManualTable(pptx, slide, rows, x, y, w, h) {
         y: y + rowIndex * rowH + 0.07,
         w: colW - 0.1,
         h: rowH - 0.1,
-        fontSize: isHeader ? 10 : 9,
+        fontSize: isHeader ? 13 : 11,
         bold: isHeader,
         color: COLORS.ink,
         margin: 0,
@@ -385,7 +456,7 @@ function addManualTable(pptx, slide, rows, x, y, w, h) {
 function addCodeBlock(pptx, slide, code, x, y, w, h) {
   const cleanCode = String(code || "")
     .split(/\r?\n/)
-    .slice(0, 16)
+    .slice(0, 18)
     .join("\n")
     .trim();
   slide.addShape(pptx.ShapeType.roundRect, {
@@ -403,7 +474,7 @@ function addCodeBlock(pptx, slide, code, x, y, w, h) {
     w: w - 0.5,
     h: h - 0.5,
     fontFace: "Consolas",
-    fontSize: 10.5,
+    fontSize: 13,
     color: COLORS.codeText,
     margin: 0,
     fit: "shrink",
@@ -429,26 +500,36 @@ async function writePptx(jobDir, jobId, slides) {
   slides.forEach((slideModel, index) => {
     const slide = pptx.addSlide();
     const kind = slideKind(slideModel, index);
+    if (kind === "title") {
+      addTitleSlide(pptx, slide, slideModel, index, slides.length);
+      return;
+    }
     const accent = addBaseSlide(pptx, slide, slideModel, index, slides.length);
+    addTakeaway(pptx, slide, slideModel.takeaway, accent);
 
-    if (kind === "dry-run") {
-      addBulletPanel(pptx, slide, slideModel.bullets.slice(0, 3), { x: 0.95, y: 1.18, w: 4.0, h: 4.75, fontSize: 14 });
-      addManualTable(pptx, slide, slideModel.table, 5.25, 1.25, 6.85, 4.55);
+    if (kind === "dry_run" || kind === "dry-run" || kind === "comparison" || (kind === "verification" && slideModel.table.length)) {
+      addBulletList(slide, slideModel.bullets.slice(0, 2), { x: 0.95, y: 1.8, w: 3.25, h: 4.55, fontSize: 16 });
+      addManualTable(pptx, slide, slideModel.table, 4.45, 1.82, 7.85, 4.75);
       if (!slideModel.table.length) {
-        addFlowGraphic(pptx, slide, slideModel.bullets, 5.9);
+        addFlowGraphic(pptx, slide, slideModel.flow?.length ? slideModel.flow : slideModel.bullets, 5.9);
       }
       return;
     }
 
     if (kind === "code") {
-      addBulletPanel(pptx, slide, slideModel.bullets.slice(0, 3), { x: 0.95, y: 1.18, w: 4.15, h: 4.75, fontSize: 14 });
-      addCodeBlock(pptx, slide, slideModel.code, 5.35, 1.2, 6.85, 4.85);
+      addBulletList(slide, slideModel.bullets.slice(0, 4), { x: 0.95, y: 1.82, w: 3.65, h: 4.85, fontSize: 16 });
+      addCodeBlock(pptx, slide, slideModel.code, 4.88, 1.8, 7.42, 4.95);
       return;
     }
 
-    addBulletPanel(pptx, slide, slideModel.bullets, { x: 0.95, y: 1.18, w: 6.05, h: 4.55 });
+    if (kind === "references") {
+      addBulletList(slide, slideModel.bullets, { x: 0.95, y: 1.85, w: 11.1, h: 4.8, fontSize: 17 });
+      return;
+    }
+
+    addBulletList(slide, slideModel.bullets, { x: 0.95, y: 1.85, w: 6.25, h: 4.45, fontSize: kind === "references" ? 16 : 18 });
     addConceptGraphic(pptx, slide, kind, accent);
-    addFlowGraphic(pptx, slide, slideModel.bullets, 6.05);
+    addFlowGraphic(pptx, slide, slideModel.flow?.length ? slideModel.flow : slideModel.bullets, 6.05);
   });
 
   const pptxPath = path.join(jobDir, "deck.pptx");
@@ -474,11 +555,15 @@ function renderSlideHtml(slide) {
     : "";
   const table = renderTableHtml(slide.table);
   const code = slide.code ? `<pre><code>${escapeHtml(slide.code)}</code></pre>` : "";
-  return `<section class="slide-card">
+  const takeaway = slide.takeaway ? `<p class="takeaway">${escapeHtml(slide.takeaway)}</p>` : "";
+  const flow = slide.flow?.length ? `<div class="flow">${slide.flow.map((item) => `<span>${escapeHtml(item)}</span>`).join("<b>›</b>")}</div>` : "";
+  return `<section class="slide-card kind-${escapeHtml(slide.kind || "concept")}">
       <h2>${escapeHtml(slide.title)}</h2>
+      ${takeaway}
       ${bullets}
       ${table}
       ${code}
+      ${flow}
     </section>`;
 }
 
@@ -493,7 +578,8 @@ function renderHtml(slides) {
       body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #f8fafc; color: #111827; }
       main { max-width: 1040px; margin: 0 auto; padding: 28px 18px 48px; display: grid; gap: 18px; }
       .slide-card { min-height: 440px; background: #fff; border: 1px solid #dbe3ef; border-left: 7px solid #0f766e; border-radius: 8px; padding: 30px 34px; box-shadow: 0 12px 28px rgba(15, 23, 42, 0.07); }
-      h2 { margin: 0 0 18px; font-size: 28px; line-height: 1.15; letter-spacing: 0; }
+      h2 { margin: 0 0 14px; font-size: 36px; line-height: 1.12; letter-spacing: -0.02em; }
+      .takeaway { margin: 0 0 22px; font-size: 21px; line-height: 1.4; font-weight: 650; color: #334155; }
       ul { margin: 0; padding-left: 22px; font-size: 18px; line-height: 1.55; }
       li { margin: 8px 0; }
       table { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: 14px; }
@@ -501,6 +587,9 @@ function renderHtml(slides) {
       th { background: #e2e8f0; }
       pre { margin-top: 18px; padding: 18px; border-radius: 8px; background: #0f172a; color: #e2e8f0; overflow: auto; }
       code { font-family: Consolas, ui-monospace, SFMono-Regular, monospace; font-size: 13px; line-height: 1.45; }
+      .flow { display: flex; align-items: center; gap: 10px; margin-top: 24px; flex-wrap: wrap; }
+      .flow span { border: 1px solid #99f6e4; background: #ecfeff; border-radius: 8px; padding: 9px 12px; font-weight: 700; }
+      .flow b { color: #64748b; font-size: 22px; }
     </style>
   </head>
   <body>
@@ -523,11 +612,14 @@ async function readJson(req) {
 async function renderDeck(payload) {
   const jobId = String(payload.job_id || "unknown").replace(/[^a-zA-Z0-9_-]/g, "");
   const markdown = String(payload.markdown || "");
-  const slides = parseDeck(markdown);
+  const slides = parseDeck(markdown, payload.deck);
   log("info", "render.started", { job_id: jobId, markdown_chars: markdown.length, slide_count: slides.length });
   const jobDir = path.join(SLIDES_ROOT, jobId);
   await mkdir(jobDir, { recursive: true });
   await writeFile(path.join(jobDir, "deck.md"), markdown, "utf-8");
+  if (payload.deck) {
+    await writeFile(path.join(jobDir, "deck.json"), JSON.stringify(payload.deck, null, 2), "utf-8");
+  }
   const pptxPath = await writePptx(jobDir, jobId, slides);
   await writeFile(path.join(jobDir, "index.html"), renderHtml(slides), "utf-8");
   log("info", "render.files_written", { job_id: jobId, pptx_path: pptxPath, slide_count: slides.length });
@@ -595,6 +687,10 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, "0.0.0.0", () => {
-  log("info", "server.listening", { port: PORT, slides_root: SLIDES_ROOT, verbose: VERBOSE_LOGGING });
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  server.listen(PORT, "0.0.0.0", () => {
+    log("info", "server.listening", { port: PORT, slides_root: SLIDES_ROOT, verbose: VERBOSE_LOGGING });
+  });
+}
+
+export { parseDeck, renderDeck };

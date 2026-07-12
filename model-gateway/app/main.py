@@ -3,6 +3,7 @@ import logging
 from fastapi import FastAPI, HTTPException
 
 from app.config import get_settings
+from app.json_contract import StructuredOutputError, normalize_json_text, strict_json_retry_prompt
 from app.provider import get_provider
 from app.schemas import GenerateRequest, GenerateResponse
 
@@ -15,6 +16,8 @@ startup_error: str | None = None
 
 def public_error(exc: Exception) -> str:
     message = str(exc)
+    if isinstance(exc, StructuredOutputError):
+        return "Model provider failed to return valid structured JSON after retrying."
     if "(401)" in message or "UNAUTHENTICATED" in message or "ACCESS_TOKEN_TYPE_UNSUPPORTED" in message:
         return "Model provider authentication failed. Replace or repair the gateway API credential."
     if "(429)" in message:
@@ -59,7 +62,20 @@ def generate(request: GenerateRequest) -> GenerateResponse:
     global startup_error
     provider = get_provider()
     try:
-        text = provider.generate(request.prompt, request.max_new_tokens, json_mode=request.json_mode)
+        prompt = request.prompt
+        structured_attempts = 3 if request.json_mode else 1
+        for attempt in range(1, structured_attempts + 1):
+            text = provider.generate(prompt, request.max_new_tokens, json_mode=request.json_mode)
+            if not request.json_mode:
+                break
+            try:
+                text = normalize_json_text(text)
+                break
+            except StructuredOutputError:
+                if attempt >= structured_attempts:
+                    raise
+                logger.warning("Provider violated JSON contract; retrying structured generation attempt=%s", attempt)
+                prompt = strict_json_retry_prompt(request.prompt, text)
         startup_error = None
     except Exception as exc:
         startup_error = public_error(exc)

@@ -22,16 +22,32 @@ def build_explanation(
         len(solution.get("code", "")),
         verification.get("status"),
     )
-    raw = runtime.generate(
-        explanation_prompt(problem_summary, pattern, solution, evidence, verification),
-        max_new_tokens=3072,
-        json_mode=True,
-    )
-    try:
-        data = parse_json_object(raw, wrapper_keys=("explanation", "result", "data"))
-    except ValueError:
-        logger.error("Explanation JSON parse failed response_preview=%s", response_preview(raw))
-        raise
+    base_prompt = explanation_prompt(problem_summary, pattern, solution, evidence, verification)
+    raw = ""
+    parse_error: ValueError | None = None
+    for attempt in range(1, 3):
+        prompt = base_prompt
+        if attempt > 1:
+            prompt += """
+
+Your previous response was truncated or malformed. Return exactly one complete JSON object with all six requested fields. Shorten the prose and use compact dry-run tables so the JSON closes within the output limit. Do not wrap the object in an array or Markdown fence.
+"""
+        raw = runtime.generate(prompt, max_new_tokens=8192, json_mode=True)
+        try:
+            data = parse_json_object(raw, wrapper_keys=("explanation", "result", "data"))
+            break
+        except ValueError as exc:
+            parse_error = exc
+            log = logger.warning if attempt == 1 else logger.error
+            log(
+                "Explanation JSON parse failed attempt=%s response_chars=%s response_preview=%s",
+                attempt,
+                len(raw),
+                response_preview(raw),
+            )
+    else:
+        assert parse_error is not None
+        raise parse_error
     defaults_used: list[str] = []
 
     def field(key: str, default: str) -> str:

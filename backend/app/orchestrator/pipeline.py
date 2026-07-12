@@ -28,8 +28,8 @@ from app.rag.chunker import chunk_text
 from app.rag.embeddings import embed_texts
 from app.rag.evidence_builder import build_claims
 from app.rag.qdrant_store import QdrantStore
-from app.retrieval.source_registry import RetrievedSource, retrieve_sources
-from app.slides.slide_markdown_generator import build_slide_markdown
+from app.retrieval.source_registry import RetrievedSource, is_algorithm_source, retrieve_sources
+from app.slides.slide_markdown_generator import build_slide_deck, deck_to_markdown
 from app.slides.slide_renderer_client import render_slides
 from app.solver.code_generator import generate_solution_variants, repair_solution, select_primary_solution
 from app.solver.problem_analyzer import analyze_problem
@@ -75,7 +75,7 @@ def _local_rag_query(problem_summary: str, selected_pattern: str, candidate_patt
     )
 
 
-def _local_rag_sources(results: list[dict[str, object]]) -> list[RetrievedSource]:
+def _local_rag_sources(results: list[dict[str, object]], selected_pattern: str) -> list[RetrievedSource]:
     sources: list[RetrievedSource] = []
     for result in results:
         payload = result.get("payload", {})
@@ -86,8 +86,7 @@ def _local_rag_sources(results: list[dict[str, object]]) -> list[RetrievedSource
         text = str(payload.get("text_preview") or "")
         if not text.strip():
             continue
-        sources.append(
-            RetrievedSource(
+        source = RetrievedSource(
                 title=f"Local RAG: {title}",
                 url=url,
                 source_name=str(payload.get("source_name") or "local_rag"),
@@ -97,7 +96,11 @@ def _local_rag_sources(results: list[dict[str, object]]) -> list[RetrievedSource
                 is_cache_allowed=True,
                 license_note=f"Reused from local vector store; score={float(result.get('score', 0.0)):.2f}",
             )
-        )
+        payload_pattern = str(payload.get("selected_pattern") or "")
+        if payload_pattern and payload_pattern != selected_pattern:
+            continue
+        if is_algorithm_source(source):
+            sources.append(source)
     return sources
 
 
@@ -140,7 +143,7 @@ def run_job_pipeline(job_id: str) -> None:
         try:
             logger.info("Job pipeline started job_id=%s language=%s", job.id, job.language)
             set_job_status(db, job, JobStatus.ANALYZING)
-            job.current_step = "Loading local model and analyzing problem"
+            job.current_step = "Connecting to the model gateway and analyzing the problem"
             db.add(job)
             db.commit()
             db.refresh(job)
@@ -169,7 +172,7 @@ def run_job_pipeline(job_id: str) -> None:
                 cache_dir=settings.embedding_cache_dir,
             )
             local_results = QdrantStore().search_chunks(local_query_vectors[0] if local_query_vectors else [], limit=5, score_threshold=0.62)
-            local_sources = _local_rag_sources(local_results)
+            local_sources = _local_rag_sources(local_results, analysis.selected_pattern)
             retrieved_sources = retrieve_sources(job.problem_text, analysis.candidate_patterns, source_urls, local_sources=local_sources)
             logger.info(
                 "Retrieved sources job_id=%s requested_url_count=%s local_count=%s retrieved_count=%s",
@@ -230,6 +233,9 @@ def run_job_pipeline(job_id: str) -> None:
                     "chunk_index": chunk.chunk_index,
                     "text_preview": chunk.chunk_text[:280],
                     "source_tier": next((source.source_tier for source in source_rows if source.id == chunk.source_document_id), 4),
+                    "selected_pattern": analysis.selected_pattern,
+                    "candidate_patterns": analysis.candidate_patterns,
+                    "evidence_kind": "algorithm_intuition_and_code",
                 }
                 for chunk in chunks
             ]
@@ -337,7 +343,7 @@ def run_job_pipeline(job_id: str) -> None:
 
             set_job_status(db, job, JobStatus.GENERATING_SLIDES)
             source_dicts = [{"title": source.title, "url": source.url} for source in source_rows]
-            markdown = build_slide_markdown(
+            deck = build_slide_deck(
                 runtime,
                 job.title or "Programming Problem",
                 analysis.summary,
@@ -346,8 +352,9 @@ def run_job_pipeline(job_id: str) -> None:
                 explanation_data,
                 source_dicts,
             )
+            markdown = deck_to_markdown(deck)
             markdown_path = save_slide_markdown(job.id, markdown)
-            rendered = render_slides(job.id, markdown)
+            rendered = render_slides(job.id, markdown, deck)
             db.add(
                 SlideArtifact(
                     job_id=job.id,

@@ -207,6 +207,7 @@ services:
       - LOG_MAX_FILES=${LOG_MAX_FILES:-10}
     volumes:
       - ./slide-renderer/server.js:/app/server.js:ro
+      - ./slide-renderer/test.js:/app/test.js:ro
       - ./slide-renderer/package.json:/app/package.json:ro
       - ./scripts/tee-rotate.sh:/logging/tee-rotate.sh:ro
       - ./data/slide-renderer/node_modules:/app/node_modules

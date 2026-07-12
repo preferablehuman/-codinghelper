@@ -1,12 +1,13 @@
-import { BookOpenCheck, Braces, Cloud, Cpu, Database, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowRight, Cloud, Cpu, Database, LoaderCircle, ShieldCheck, Sparkles } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { getHealth } from "../api/client";
-import ProblemForm from "../components/ProblemForm";
+import ProblemForm, { type ProblemFormState } from "../components/ProblemForm";
 import type { HealthResponse } from "../types/api";
 
 export default function ProblemInputPage() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [formState, setFormState] = useState<ProblemFormState>({ submitting: false, canSubmit: false });
 
   useEffect(() => {
     void getHealth().then(setHealth).catch(() => setHealth(null));
@@ -32,18 +33,14 @@ export default function ProblemInputPage() {
             <Sparkles size={14} aria-hidden="true" />
             From problem statement to verified understanding
           </div>
-          <h1 className="mt-5 text-3xl font-semibold tracking-tight sm:text-5xl">
-            Learn the path from brute force to optimal.
-          </h1>
-          <p className="mt-4 max-w-2xl text-base leading-7 text-zinc-300 sm:text-lg">
-            Generate distinct solution approaches, test executable code, and see the reasoning that connects each improvement.
-          </p>
+          <h1 className="mt-5 text-3xl font-semibold tracking-tight sm:text-5xl">Learn the path from brute force to optimal.</h1>
+          <p className="mt-4 max-w-2xl text-base leading-7 text-zinc-300 sm:text-lg">Generate distinct solution approaches, test executable code, and see the reasoning that connects each improvement.</p>
         </div>
       </section>
 
       <div className="grid min-h-[calc(100vh-24rem)] gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <section className="surface animate-rise-in rounded-2xl p-5 sm:p-7">
-          <ProblemForm />
+          <ProblemForm onStateChange={setFormState} />
         </section>
         <aside className="space-y-5">
           <section className="surface rounded-2xl p-5">
@@ -63,12 +60,19 @@ export default function ProblemInputPage() {
           </section>
 
           <section className="surface rounded-2xl p-5">
-            <h2 className="text-base font-semibold text-zinc-950 dark:text-white">What you’ll get</h2>
-            <div className="mt-4 space-y-4">
-              <Feature icon={<Braces size={17} />} title="Approach ladder" text="Separate brute-force, improved, and optimal implementations." />
-              <Feature icon={<BookOpenCheck size={17} />} title="Guided explanation" text="Dry runs, state changes, pitfalls, and complexity in one view." />
-              <Feature icon={<ShieldCheck size={17} />} title="Sandbox proof" text="Generated Java or Python is executed against a full test suite." />
-            </div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400">Ready to analyze</p>
+            <h2 className="mt-2 text-xl font-semibold tracking-tight text-zinc-950 dark:text-white">Build the solution ladder</h2>
+            <p className="mt-2 text-sm leading-6 text-zinc-500 dark:text-zinc-400">We analyze the problem itself, generate meaningfully different approaches, and verify the best implementation.</p>
+            <button
+              type="submit"
+              form="problem-form"
+              disabled={!formState.canSubmit}
+              className="focus-ring mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white shadow-lg shadow-emerald-900/15 transition hover:-translate-y-0.5 hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-500 disabled:shadow-none disabled:hover:translate-y-0 dark:disabled:bg-zinc-800"
+            >
+              {formState.submitting ? <LoaderCircle size={17} className="animate-spin" aria-hidden="true" /> : null}
+              {formState.submitting ? "Starting analysis…" : "Generate solution ladder"}
+              {!formState.submitting ? <ArrowRight size={17} aria-hidden="true" /> : null}
+            </button>
           </section>
         </aside>
       </div>
@@ -84,20 +88,6 @@ function StatusLine({ icon, label, value }: { icon: ReactNode; label: string; va
         {label}
       </span>
       <span className="max-w-[190px] truncate text-right font-mono text-xs text-zinc-800 dark:text-zinc-100" title={value}>{value}</span>
-    </div>
-  );
-}
-
-function Feature({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {
-  return (
-    <div className="flex gap-3">
-      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
-        {icon}
-      </div>
-      <div>
-        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</h3>
-        <p className="mt-1 text-sm leading-6 text-zinc-500 dark:text-zinc-400">{text}</p>
-      </div>
     </div>
   );
 }

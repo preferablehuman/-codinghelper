@@ -25,9 +25,8 @@ def _get_job_or_404(db: Session, job_id: str) -> Job:
 @router.post("", response_model=JobCreated, status_code=status.HTTP_201_CREATED)
 def create_job(payload: JobCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> JobCreated:
     logger.info(
-        "Creating job language=%s difficulty=%s source_url_count=%s problem_chars=%s",
+        "Creating job language=%s source_url_count=%s problem_chars=%s",
         payload.language,
-        payload.difficulty,
         len(payload.source_urls),
         len(payload.problem_text),
     )
@@ -35,7 +34,7 @@ def create_job(payload: JobCreate, background_tasks: BackgroundTasks, db: Sessio
         title=payload.title,
         problem_text=payload.problem_text,
         language=payload.language.lower(),
-        difficulty=payload.difficulty,
+        difficulty=None,
         source_urls_json=json.dumps(payload.source_urls),
         status=JobStatus.PENDING.value,
     )
@@ -93,6 +92,14 @@ def get_job_status(job_id: str, db: Session = Depends(get_db)) -> JobStatusRespo
 def rerun_job(job_id: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> JobCreated:
     job = _get_job_or_404(db, job_id)
     logger.info("Rerunning job job_id=%s previous_status=%s", job.id, job.status)
+    job.verification_runs.clear()
+    job.explanations.clear()
+    job.slide_artifacts.clear()
+    job.test_cases.clear()
+    job.evidence_items.clear()
+    job.solutions.clear()
+    job.sources.clear()
+    db.flush()
     job.status = JobStatus.PENDING.value
     job.progress_percent = 5
     job.current_step = "Queued for rerun"

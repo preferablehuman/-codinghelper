@@ -130,7 +130,13 @@ def solution_variant_prompt(
     previous_summary = "None yet."
     if previous_approaches:
         previous_summary = "\n\n".join(
-            f"{item['approach_type']}: {item['explanation']} Complexity: {item['time_complexity']} time, {item['space_complexity']} space."
+            "\n".join(
+                [
+                    f"{item['approach_type']} ({item['algorithm_pattern']}):",
+                    f"Pseudocode: {item['pseudocode']}",
+                    f"Complexity: {item['time_complexity']} time, {item['space_complexity']} space.",
+                ]
+            )
             for item in previous_approaches
         )
     approach_guidance = {
@@ -152,65 +158,8 @@ Return only one valid JSON object with these string fields:
 Approach requirement:
 - Set approach_type to "{approach_type}".
 - {approach_guidance}
-- Do not return an array or multiple solutions.
-
-Code requirements:
-- The code must be complete and executable as a standalone {language} program.
-- Use stdin/stdout. If the problem omits stdin details, use the simplest natural format for the stated function arguments.
-- Do not hard-code sample calls in main; read stdin and print exactly one answer.
-- Use only the language standard library.
-- Solve the actual problem and do not invent unsupported source claims.
-
-Earlier approaches in this ladder:
-{previous_summary}
-
-Problem:
-{problem_text}
-
-Language:
-{language}
-
-Detected algorithm pattern:
-{pattern}
-
-Evidence pack:
-{evidence}
-"""
-
-
-def solution_variant_prompt(
-    problem_text: str,
-    language: str,
-    pattern: str,
-    evidence: str,
-    approach_type: str,
-    previous_approaches: list[dict[str, str]],
-) -> str:
-    previous_summary = "None yet."
-    if previous_approaches:
-        previous_summary = "\n\n".join(
-            f"{item['approach_type']}: {item['explanation']} Complexity: {item['time_complexity']} time, {item['space_complexity']} space."
-            for item in previous_approaches
-        )
-    approach_guidance = {
-        "BRUTE_FORCE": "Use the clearest genuinely naive or direct exhaustive strategy. Prioritize teaching value over efficiency.",
-        "IMPROVED": "Use a meaningful intermediate strategy. It must differ from the listed approaches in algorithm, data structure, or complexity; otherwise return the same algorithm only if no honest intermediate exists.",
-        "OPTIMAL": "Use the expected interview or competitive-programming solution and explicitly explain why it improves on the listed approaches.",
-    }.get(approach_type, "Use a meaningfully distinct strategy.")
-    return f"""Generate exactly one {approach_type} solution for a programming-problem learning ladder.
-
-Return only one valid JSON object with these string fields:
-- approach_type
-- algorithm_pattern
-- explanation
-- pseudocode
-- code
-- time_complexity
-- space_complexity
-
-Approach requirement:
-- Set approach_type to "{approach_type}".
-- {approach_guidance}
+- Similar intuition or the same high-level goal is acceptable when the algorithm, data structure, state representation, or control flow is genuinely different.
+- Do not disguise the same implementation with renamed variables, reordered helpers, or different prose.
 - Do not return an array or multiple solutions.
 
 Code requirements:
@@ -359,7 +308,7 @@ Solution:
 """
 
 
-def slide_markdown_prompt(
+def slide_deck_prompt(
     title: str,
     problem_summary: str,
     pattern: str,
@@ -367,31 +316,46 @@ def slide_markdown_prompt(
     explanation: dict[str, str],
     sources: list[dict[str, str]],
 ) -> str:
-    return f"""Generate a polished learner-focused Markdown deck for this programming explanation.
+    return f"""Design a complete teaching deck for a learner who has never seen this problem or algorithm.
 
-Return only Markdown, not JSON and not commentary.
+Return only one valid JSON object with this shape:
+{{
+  "deck_title": "string",
+  "audience": "beginner programming learner",
+  "learning_objective": "what the learner can explain or execute after the deck",
+  "slides": [
+    {{
+      "kind": "title|problem|observation|comparison|approach|state|dry_run|code|correctness|verification|summary|references",
+      "title": "takeaway-style title",
+      "takeaway": "one sentence that states the slide's main point",
+      "bullets": ["0 to 5 concise supporting points"],
+      "flow": ["2 to 5 ordered state or decision labels"],
+      "code": "short relevant pseudocode or code excerpt, otherwise empty",
+      "table": {{"headers": ["header"], "rows": [["cell"]]}},
+      "notes": "optional detailed teaching explanation"
+    }}
+  ]
+}}
 
-Required slides, in this exact order:
-1. What Are We Solving?
-2. Approach Ladder
-3. Brute Force Baseline
-4. Improved Approach
-5. Expected / Optimal Solution
-6. Illustration / Dry Run
-7. Code Logic Trace
-8. Complexity, Tests, and Pitfalls
+Narrative requirements:
+- Create 12 to 16 slides following a cumulative learning progression.
+- Open with a minimal title slide, then explain the problem in plain language and translate constraints into algorithm observations.
+- Compare every genuinely distinct BRUTE_FORCE, IMPROVED, and OPTIMAL approach from Solution. Give each approach its own slide and explain what state it stores, what work it avoids, and why it improves.
+- Include one full comparison slide with approach, core idea, time, space, strength, and limitation.
+- Include one state/data-structure slide that visually describes what each stored value means.
+- Include at least two concrete dry-run slides. Use real sample values and tables with Step, Input or Cell, State Before, Decision, State After, and Result.
+- Include at least two code slides: first map pseudocode to phases, then trace the most important executable code lines. Keep each excerpt under 18 lines.
+- Include a correctness slide centered on the invariant and why all invalid/valid cases are covered.
+- Include verification with generated test categories, pass/fail counts, complexity, and pitfalls.
+- Close with a synthesis slide that teaches when to recognize and reuse this pattern, followed by a short references slide containing only relevant algorithm/code-intuition sources.
 
-Rules:
-- Use Markdown slide separators (`---`).
-- Keep each slide focused with 3 to 6 learner-friendly bullets.
-- Always include a concrete GeeksforGeeks-style markdown table on the illustration slide showing Step, Input/Char, Stack/State, Action, and Result.
-- Always include concise pseudocode or a short code excerpt on the code logic trace slide.
-- Reflect the BRUTE_FORCE, IMPROVED, and OPTIMAL approaches when they are present in Solution.
-- Include tests and verification status where available.
-- Include an approach comparison table with approach name, idea, time, space, and when to use it.
-- Prefer simple diagrams described as short flow lines such as `input -> state -> decision -> output`.
-- Avoid vague teaching text; each slide must help a learner execute or compare the algorithm.
-- Do not include HTML, theme config, presenter notes, or long source listings.
+Writing and layout requirements:
+- Each slide has exactly one teaching job and a takeaway-style title.
+- Use concrete state changes and decisions, not generic claims such as "this is efficient".
+- Keep visible bullets concise; place deeper explanation in notes.
+- Use flow only for ordered processes. Use table only when row/column comparison materially teaches the idea.
+- Do not repeat the same bullet across slides. Do not expose prompt or production instructions.
+- Never fabricate sample values, code behavior, complexity, or verification results; derive them from the supplied problem, solution, explanation, and sources.
 
 Title:
 {title}

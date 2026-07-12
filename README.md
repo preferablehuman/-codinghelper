@@ -95,12 +95,23 @@ Set `VERBOSE_LOGGING=true` in `.env` before starting Compose to enable debug-lev
 
 The application talks only to `MODEL_GATEWAY_URL`. Provider selection, credentials, model names, retries, and provider-specific HTTP formats belong exclusively to `model-gateway`.
 
-For Gemini, configure `.env`:
+For NVIDIA hosted models, configure `.env`:
 
 ```dotenv
-LLM_PROVIDER=gemini
-LLM_MODEL=gemini-2.5-flash
-GEMINI_API_KEY=your_key_from_google_ai_studio
+LLM_PROVIDER=nvidia
+NVIDIA_LLM_MODEL=nvidia/your-model-id
+NVIDIA_LLM_JSON_MODEL=
+NVIDIA_LLM_API_KEY=your_nvidia_api_key
+NVIDIA_LLM_BASE_URL=https://integrate.api.nvidia.com/v1
+```
+
+Provider interaction is implemented with LangChain. Supported values are `nvidia`, `gemini`, `ollama`, `openai`, and `openai_compatible`. Switching to a local Ollama model requires only environment changes:
+
+```dotenv
+LLM_PROVIDER=ollama
+OLLAMA_LLM_MODEL=qwen2.5-coder:7b
+OLLAMA_LLM_JSON_MODEL=
+OLLAMA_LLM_BASE_URL=http://ollama:11434
 ```
 
 Restart only the gateway after changing providers or keys:
@@ -109,7 +120,7 @@ Restart only the gateway after changing providers or keys:
 docker compose restart model-gateway
 ```
 
-The credential is available only to the gateway container and is never included in the frontend bundle or normal API responses. Adding another provider requires one gateway adapter; the application backend, pipeline, and frontend contract remain unchanged.
+Each provider keeps its own model, JSON model, credential, and endpoint values. The gateway reads only the block selected by `LLM_PROVIDER`, so switching providers does not require rewriting or losing the previous provider's configuration. Credentials are available only to the gateway container and are never included in the frontend bundle or normal API responses. LangChain owns provider-specific SDK behavior inside the gateway; the application backend, pipeline, and frontend contract remain unchanged.
 
 The backend intentionally stays online when the model gateway is degraded. `/api/health` reports model readiness, while history and other non-generation features continue working. Provider failures therefore appear as explicit job/gateway errors instead of browser-level `Failed to fetch` messages.
 

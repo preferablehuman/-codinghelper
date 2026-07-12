@@ -7,7 +7,6 @@ class JobCreate(BaseModel):
     title: str | None = None
     problem_text: str = Field(min_length=10)
     language: str = "java"
-    difficulty: str | None = None
     source_urls: list[str] = Field(default_factory=list)
 
 

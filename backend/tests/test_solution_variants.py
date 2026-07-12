@@ -1,7 +1,7 @@
 import json
 
 from app.model_runtime.base import BaseModelRuntime
-from app.solver.code_generator import generate_solution_variants
+from app.solver.code_generator import _solutions_are_too_similar, generate_solution_variants
 
 
 class FakeRuntime(BaseModelRuntime):
@@ -44,6 +44,30 @@ class FakeRuntime(BaseModelRuntime):
         )
 
 
+class DuplicateThenDistinctRuntime(FakeRuntime):
+    def __init__(self) -> None:
+        super().__init__()
+        self.improved_calls = 0
+
+    def generate(self, prompt: str, max_new_tokens: int = 1024, *, json_mode: bool = False) -> str:
+        if "exactly one IMPROVED" in prompt:
+            self.improved_calls += 1
+            if self.improved_calls == 1:
+                self.prompts.append(prompt)
+                return json.dumps(
+                    {
+                        "approach_type": "IMPROVED",
+                        "algorithm_pattern": "test",
+                        "explanation": "Different wording for the same idea.",
+                        "pseudocode": "BRUTE_FORCE",
+                        "code": "print('brute')",
+                        "time_complexity": "O(n log n)",
+                        "space_complexity": "O(1)",
+                    }
+                )
+        return super().generate(prompt, max_new_tokens, json_mode=json_mode)
+
+
 def test_generates_each_approach_as_an_independent_request() -> None:
     runtime = FakeRuntime()
 
@@ -59,3 +83,52 @@ def test_invalid_optional_improved_approach_still_returns_required_pair() -> Non
     variants = generate_solution_variants(runtime, "python", "problem text", "test", "evidence")
 
     assert [item["approach_type"] for item in variants] == ["BRUTE_FORCE", "OPTIMAL"]
+
+
+def test_duplicate_variant_is_retried_with_distinctness_instruction() -> None:
+    runtime = DuplicateThenDistinctRuntime()
+
+    variants = generate_solution_variants(runtime, "python", "problem text", "test", "evidence")
+
+    assert [item["approach_type"] for item in variants] == ["BRUTE_FORCE", "IMPROVED", "OPTIMAL"]
+    assert runtime.improved_calls == 2
+    assert "previous candidate was invalid, truncated, or duplicated" in runtime.prompts[2]
+
+
+def test_same_intuition_is_allowed_for_different_implementations() -> None:
+    left = {
+        "algorithm_pattern": "nested_scan",
+        "explanation": "Track whether each value has appeared.",
+        "pseudocode": "For every pair, compare their values.",
+        "code": "for i in range(n):\n for j in range(i): check(i, j)",
+        "time_complexity": "O(n^2)",
+        "space_complexity": "O(1)",
+    }
+    right = {
+        "algorithm_pattern": "hash_set",
+        "explanation": "Track whether each value has appeared.",
+        "pseudocode": "Insert each value into a set and reject repeats.",
+        "code": "seen = set()\nfor value in values: seen.add(value)",
+        "time_complexity": "O(n)",
+        "space_complexity": "O(n)",
+    }
+
+    assert not _solutions_are_too_similar(left, right)
+
+
+def test_same_code_is_duplicate_even_when_explanation_and_complexity_claims_differ() -> None:
+    left = {
+        "algorithm_pattern": "scan",
+        "explanation": "First explanation.",
+        "pseudocode": "Scan values.",
+        "code": "for value in values:\n    print(value)",
+        "time_complexity": "O(n)",
+        "space_complexity": "O(1)",
+    }
+    right = {
+        **left,
+        "explanation": "Unrelated prose.",
+        "time_complexity": "O(1)",
+    }
+
+    assert _solutions_are_too_similar(left, right)
