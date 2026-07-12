@@ -19,7 +19,7 @@ def generate_solution(
     evidence: str,
 ) -> dict[str, str]:
     logger.info("Generating solution language=%s pattern=%s problem_chars=%s evidence_chars=%s", language, pattern, len(problem_text), len(evidence))
-    raw = runtime.generate(solution_prompt(problem_text, language, pattern, evidence), max_new_tokens=4096, json_mode=True)
+    raw = runtime.generate(solution_prompt(problem_text, language, pattern, evidence), max_new_tokens=4096, json_mode=True, schema_name="solution")
     try:
         data = parse_json_object(raw)
     except ValueError:
@@ -67,7 +67,7 @@ def generate_solution_variants(
 The previous candidate was invalid, truncated, or duplicated an earlier implementation. Generate a genuinely different algorithm, data structure, state representation, or control flow. Similar high-level intuition is acceptable when the implementation approach is distinct. Keep the explanation and pseudocode compact, keep the code complete, and return one complete JSON object only.
 """
             try:
-                raw = runtime.generate(prompt, max_new_tokens=8192, json_mode=True)
+                raw = runtime.generate(prompt, max_new_tokens=8192, json_mode=True, schema_name="solution")
                 item = parse_json_object(raw)
                 normalized = _normalize_solution_payload(item, pattern, language=language)
                 normalized["approach_type"] = approach_type
@@ -125,6 +125,7 @@ def repair_solution(
         repair_prompt(problem_text, language, evidence, solution, tests, verification),
         max_new_tokens=4096,
         json_mode=True,
+        schema_name="solution",
     )
     try:
         data = parse_json_object(raw)

@@ -24,7 +24,7 @@ class ArrayExplanationRuntime(BaseModelRuntime):
     def status(self) -> dict[str, object]:
         return {"loaded": True}
 
-    def generate(self, prompt: str, max_new_tokens: int = 1024, *, json_mode: bool = False) -> str:
+    def generate(self, prompt: str, max_new_tokens: int = 1024, *, json_mode: bool = False, schema_name: str | None = None) -> str:
         return json.dumps([EXPLANATION])
 
 
@@ -38,7 +38,7 @@ class TruncatedThenValidRuntime(BaseModelRuntime):
     def status(self) -> dict[str, object]:
         return {"loaded": True}
 
-    def generate(self, prompt: str, max_new_tokens: int = 1024, *, json_mode: bool = False) -> str:
+    def generate(self, prompt: str, max_new_tokens: int = 1024, *, json_mode: bool = False, schema_name: str | None = None) -> str:
         self.calls.append((prompt, max_new_tokens, json_mode))
         if len(self.calls) == 1:
             return '{"intuition": "cut off"'

@@ -1,11 +1,20 @@
 up:
+	python scripts/start_stack.py
+
+up-direct:
 	docker compose up --build
 
+up-ollama:
+	docker compose --profile ollama up --build
+
 down:
-	docker compose down
+	docker compose --profile ollama down
 
 logs:
-	docker compose logs -f
+	docker compose --profile ollama logs -f
+
+logs-ollama:
+	docker compose --profile ollama logs -f ollama
 
 backend-shell:
 	docker compose exec backend bash
@@ -24,4 +33,3 @@ test-backend:
 
 test-sandbox:
 	docker compose exec sandbox-runner pytest
-

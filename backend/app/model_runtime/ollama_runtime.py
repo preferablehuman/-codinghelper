@@ -101,7 +101,7 @@ class OllamaModelRuntime(BaseModelRuntime):
             logger.warning("Ollama status refresh failed model=%s error=%s", self.model, exc)
         return dict(self._last_status)
 
-    def generate(self, prompt: str, max_new_tokens: int = 1024, *, json_mode: bool = False) -> str:
+    def generate(self, prompt: str, max_new_tokens: int = 1024, *, json_mode: bool = False, schema_name: str | None = None) -> str:
         if not self._loaded:
             self.load()
         started = time.perf_counter()

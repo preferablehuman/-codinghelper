@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from app.model_runtime.base import BaseModelRuntime
 from app.model_runtime.json_utils import optional_string, parse_json_object, response_preview
 from app.model_runtime.prompts import problem_analysis_prompt
+from app.rag.problem_signature import ProblemSignature, deterministic_signature
 
 
 logger = logging.getLogger(__name__)
@@ -42,10 +43,12 @@ class ProblemAnalysis:
     selected_pattern: str
     candidate_patterns: list[str]
     edge_cases: list[str]
+    signature: ProblemSignature
 
 
 def analyze_problem(runtime: BaseModelRuntime, problem_text: str, language: str) -> ProblemAnalysis:
     heuristic = analyze_problem_heuristic(problem_text)
+    deterministic = deterministic_signature(problem_text)
     logger.debug(
         "Analyzing problem with model language=%s heuristic_selected=%s candidate_count=%s problem_chars=%s",
         language,
@@ -57,6 +60,7 @@ def analyze_problem(runtime: BaseModelRuntime, problem_text: str, language: str)
         problem_analysis_prompt(problem_text, language, heuristic.candidate_patterns),
         max_new_tokens=1024,
         json_mode=True,
+        schema_name="problem_analysis",
     )
     try:
         data = parse_json_object(raw)
@@ -75,6 +79,12 @@ def analyze_problem(runtime: BaseModelRuntime, problem_text: str, language: str)
         candidate_patterns = [selected_pattern, *candidate_patterns]
 
     edge_cases = _normalize_edge_cases(data.get("edge_cases")) or heuristic.edge_cases
+    signature_data = {key: data.get(key, getattr(deterministic, key)) for key in ProblemSignature.model_fields}
+    try:
+        signature = ProblemSignature.model_validate(signature_data)
+    except Exception:
+        logger.warning("Problem semantic signature validation failed; using deterministic signature")
+        signature = deterministic
     logger.info(
         "Problem analysis parsed selected_pattern=%s candidate_count=%s edge_case_count=%s",
         selected_pattern,
@@ -86,6 +96,7 @@ def analyze_problem(runtime: BaseModelRuntime, problem_text: str, language: str)
         selected_pattern=selected_pattern,
         candidate_patterns=candidate_patterns[:6],
         edge_cases=edge_cases[:10],
+        signature=signature,
     )
 
 
@@ -109,6 +120,7 @@ def analyze_problem_heuristic(problem_text: str) -> ProblemAnalysis:
         selected_pattern=selected,
         candidate_patterns=candidates,
         edge_cases=["empty input where valid", "single element", "duplicates", "large values", "no solution"],
+        signature=deterministic_signature(problem_text),
     )
     logger.debug("Heuristic analysis selected_pattern=%s candidates=%s", analysis.selected_pattern, analysis.candidate_patterns)
     return analysis

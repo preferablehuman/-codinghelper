@@ -6,7 +6,7 @@ import trafilatura
 from bs4 import BeautifulSoup
 
 from app.config import get_settings
-from app.retrieval.compliance import apply_storage_limit
+from app.retrieval.compliance import apply_storage_limit, get_policy
 
 
 logger = logging.getLogger(__name__)
@@ -140,6 +140,9 @@ def _candidate_sources_for_patterns(patterns: list[str]) -> list[RetrievedSource
 
 
 def _fetch_source(source: RetrievedSource) -> RetrievedSource:
+    if not get_policy(source.source_name).allow_discovery:
+        logger.warning("Source fetch denied by compliance policy source=%s", source.source_name)
+        return source
     try:
         response = httpx.get(source.url, timeout=8.0, follow_redirects=True, headers={"user-agent": "StudyBuddyBot/0.2"})
         response.raise_for_status()
@@ -210,7 +213,10 @@ def retrieve_sources(
     unique = list({source.url: source for source in sources}.values())
     target_count = min(settings.max_sources_per_job, max(3, min(6, len(unique))))
     selected = [
-        _fetch_source(source) if "+fetched" not in source.retrieval_method and source.retrieval_method != "local_rag_reuse" else source
+        _fetch_source(source)
+        if "+fetched" not in source.retrieval_method
+        and not source.retrieval_method.startswith(("local_rag", "legacy_job_rag", "knowledge_corpus"))
+        else source
         for source in unique[:target_count]
     ]
     logger.info("Algorithm sources selected unique=%s final=%s urls=%s", len(unique), len(selected), [source.url for source in selected])

@@ -69,6 +69,7 @@ class GeneratedSolutionOut(BaseModel):
     code: str
     time_complexity: str
     space_complexity: str
+    verification_status: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -84,6 +85,7 @@ class TestCaseOut(BaseModel):
 
 class VerificationRunOut(BaseModel):
     id: str
+    solution_id: str
     status: str
     stdout: str
     stderr: str
@@ -117,6 +119,20 @@ class SlideArtifactOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class RetrievalTraceOut(BaseModel):
+    route: str
+    match_type: str
+    confidence: float = 0.0
+    reused_prior_solution: bool = False
+    external_discovery_used: bool = False
+    canonical_source_count: int = 0
+    related_source_count: int = 0
+    verification_status: str | None = None
+    asserting_test_count: int = 0
+    code_adapted: bool = False
+    source_titles: list[str] = Field(default_factory=list)
+
+
 class JobDetail(BaseModel):
     id: str
     title: str | None
@@ -139,6 +155,7 @@ class JobDetail(BaseModel):
     verification_runs: list[VerificationRunOut] = Field(default_factory=list)
     explanations: list[ExplanationOut] = Field(default_factory=list)
     slide_artifacts: list[SlideArtifactOut] = Field(default_factory=list)
+    retrieval_trace: RetrievalTraceOut | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

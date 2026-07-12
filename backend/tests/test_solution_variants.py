@@ -15,7 +15,7 @@ class FakeRuntime(BaseModelRuntime):
     def status(self) -> dict[str, object]:
         return {"loaded": True}
 
-    def generate(self, prompt: str, max_new_tokens: int = 1024, *, json_mode: bool = False) -> str:
+    def generate(self, prompt: str, max_new_tokens: int = 1024, *, json_mode: bool = False, schema_name: str | None = None) -> str:
         self.prompts.append(prompt)
         if "exactly one BRUTE_FORCE" in prompt:
             approach = "BRUTE_FORCE"
@@ -49,7 +49,7 @@ class DuplicateThenDistinctRuntime(FakeRuntime):
         super().__init__()
         self.improved_calls = 0
 
-    def generate(self, prompt: str, max_new_tokens: int = 1024, *, json_mode: bool = False) -> str:
+    def generate(self, prompt: str, max_new_tokens: int = 1024, *, json_mode: bool = False, schema_name: str | None = None) -> str:
         if "exactly one IMPROVED" in prompt:
             self.improved_calls += 1
             if self.improved_calls == 1:

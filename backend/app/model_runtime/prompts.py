@@ -6,6 +6,17 @@ Return only one valid JSON object with:
 - selected_pattern: one string using snake_case
 - candidate_patterns: array of 2 to 6 snake_case strings
 - edge_cases: array of specific edge-case strings
+- objective: concise string
+- input_entities: array of strings
+- output_requirement: string
+- constraints: array preserving numeric constraints
+- ordering_assumptions: array of strings
+- uniqueness_assumptions: array of strings
+- value_domain: array of strings
+- graph_properties: array of strings
+- optimization_target: string
+- io_contract: object describing stdin and stdout
+- semantic_flags: object with nullable booleans for input_sorted, duplicates_allowed, negative_values_allowed, directed_graph, weighted_graph, negative_weights_allowed, return_indices, return_values, in_place_required, multiple_valid_outputs, modulo_required, contiguous_required, subsequence_allowed
 
 Prefer these pattern names when applicable:
 arrays, strings, hash_map, two_pointers, sliding_window, prefix_sum, binary_search, sorting, greedy, dynamic_programming, graph_bfs, graph_dfs, dijkstra, union_find, tree_traversal, recursion, backtracking, heap, stack, queue, monotonic_stack, intervals, bit_manipulation
@@ -53,6 +64,37 @@ Detected algorithm pattern:
 
 Evidence pack:
 {evidence}
+"""
+
+
+def adapt_verified_solution_prompt(problem_text: str, target_language: str, canonical: dict[str, object], tests: list[dict[str, object]]) -> str:
+    return f"""Adapt a retrieved canonical solution to {target_language}.
+
+The canonical algorithm has already been retrieved and verified against the listed tests.
+Do not replace it unless the supplied verification data identifies a defect.
+Adapt only the language and stdin/stdout wrapper required by the incoming problem.
+
+Return one JSON object with: approach_type, algorithm_pattern, explanation, pseudocode, code, time_complexity, space_complexity.
+The code must be a complete standalone stdin/stdout program.
+
+Incoming problem:
+{problem_text}
+
+Verified canonical solution:
+{canonical}
+
+Reusable tests:
+{tests}
+"""
+
+
+def problem_equivalence_prompt(incoming: dict[str, object], canonical: dict[str, object]) -> str:
+    return f"""Judge whether two programming-problem signatures describe the same executable task.
+Return one JSON object with relation (EXACT, EQUIVALENT, RELATED, or DIFFERENT), confidence (0 to 1), matching_requirements, contradictions, adaptation_required, and reason.
+This is advisory. Never ignore deterministic contradictions supplied in either signature.
+
+Incoming signature: {incoming}
+Canonical signature: {canonical}
 """
 
 

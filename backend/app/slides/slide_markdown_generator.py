@@ -26,6 +26,7 @@ def build_slide_deck(
         slide_deck_prompt(title, problem_summary, pattern, solution, explanation, sources),
         max_new_tokens=8192,
         json_mode=True,
+        schema_name="slide_deck",
     )
     data = parse_json_object(raw, wrapper_keys=("deck", "presentation", "result", "data"))
     deck = _normalize_deck(data, title, problem_summary)

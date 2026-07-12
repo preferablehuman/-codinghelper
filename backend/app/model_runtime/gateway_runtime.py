@@ -41,14 +41,17 @@ class ModelGatewayRuntime(BaseModelRuntime):
             }
         return dict(self._last_status)
 
-    def generate(self, prompt: str, max_new_tokens: int = 1024, *, json_mode: bool = False) -> str:
+    def generate(self, prompt: str, max_new_tokens: int = 1024, *, json_mode: bool = False, schema_name: str | None = None) -> str:
+        payload: dict[str, object] = {
+            "prompt": prompt,
+            "max_new_tokens": max_new_tokens,
+            "json_mode": json_mode,
+        }
+        if schema_name is not None:
+            payload["schema_name"] = schema_name
         response = httpx.post(
             f"{self.base_url}/generate",
-            json={
-                "prompt": prompt,
-                "max_new_tokens": max_new_tokens,
-                "json_mode": json_mode,
-            },
+            json=payload,
             timeout=self.request_timeout_seconds,
         )
         self._raise_for_status(response, "Model gateway generation failed")

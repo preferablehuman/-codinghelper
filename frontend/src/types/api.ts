@@ -1,5 +1,14 @@
 export type JobStatus =
   | "PENDING"
+  | "NORMALIZING_PROBLEM"
+  | "MATCHING_LOCAL_KNOWLEDGE"
+  | "REUSING_VERIFIED_SOLUTION"
+  | "ADAPTING_REUSED_SOLUTION"
+  | "SEARCHING_EXTERNAL_KNOWLEDGE"
+  | "INGESTING_EXTERNAL_KNOWLEDGE"
+  | "VERIFYING_RETRIEVED_SOLUTION"
+  | "GENERATING_FROM_GROUNDED_SOLUTION"
+  | "PROMOTING_KNOWLEDGE"
   | "ANALYZING"
   | "RETRIEVING_SOURCES"
   | "BUILDING_EVIDENCE"
@@ -89,6 +98,7 @@ export interface GeneratedSolution {
   code: string;
   time_complexity: string;
   space_complexity: string;
+  verification_status: string | null;
 }
 
 export interface TestCase {
@@ -100,6 +110,7 @@ export interface TestCase {
 
 export interface VerificationRun {
   id: string;
+  solution_id: string;
   status: string;
   stdout: string;
   stderr: string;
@@ -168,4 +179,17 @@ export interface JobDetail extends JobListItem {
   verification_runs: VerificationRun[];
   explanations: Explanation[];
   slide_artifacts: SlideArtifact[];
+  retrieval_trace: {
+    route: string;
+    match_type: string;
+    confidence: number;
+    reused_prior_solution: boolean;
+    external_discovery_used: boolean;
+    canonical_source_count: number;
+    related_source_count: number;
+    verification_status: string | null;
+    asserting_test_count: number;
+    code_adapted: boolean;
+    source_titles: string[];
+  } | null;
 }

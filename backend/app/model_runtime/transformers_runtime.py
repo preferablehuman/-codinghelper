@@ -210,7 +210,7 @@ class TransformersModelRuntime(BaseModelRuntime):
                 self._log_cache_state("after_failed_load")
                 raise
 
-    def generate(self, prompt: str, max_new_tokens: int = 1024, *, json_mode: bool = False) -> str:
+    def generate(self, prompt: str, max_new_tokens: int = 1024, *, json_mode: bool = False, schema_name: str | None = None) -> str:
         self._load()
         assert self._tokenizer is not None
         assert self._model is not None

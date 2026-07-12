@@ -132,6 +132,49 @@ The job pipeline calls the configured model runtime for solution generation, tes
 
 ## Retrieval Knowledge Base
 
+Study Buddy uses a retrieval-first, verification-gated corpus. PostgreSQL owns complete canonical problems, variants, reusable implementations, asserting tests, provenance, compliance metadata, and verification records. Qdrant contains embeddings plus stable PostgreSQL IDs; its payloads are never authoritative content.
+
+```mermaid
+flowchart TD
+    A[Incoming problem] --> B[Deterministic normalization and exact lookup]
+    B --> C[Local PostgreSQL and Qdrant corpus search]
+    C --> D[Compatibility and contradiction gate]
+    D --> E[Approved external adapter discovery]
+    E --> F[Policy-aware ingestion]
+    F --> G[Grounded model adaptation or fresh synthesis]
+    G --> H[Sandbox verification of every displayed variant]
+    H --> I[Explanation and teaching deck]
+    I --> J[Successful-run promotion]
+    J --> K[PostgreSQL source of truth and Qdrant indexes]
+```
+
+Retrieval routes are deliberately distinct:
+
+- `EXACT_REUSE`: re-run a verified implementation and stored asserting tests without fresh algorithm generation.
+- `EQUIVALENT_ADAPT`: adapt only language or I/O differences, then verify before reuse.
+- `RELATED_GROUNDING`: use related knowledge only for intuition, invariants, tests, and pitfalls.
+- `EXTERNAL_DISCOVERY`: query approved adapters; retrieved code remains untrusted until sandbox verification.
+- `GENERATE_FRESH`: use the existing grounded generation path when no reusable match exists.
+
+Stack Exchange uses its official API, Codeforces uses official metadata only, curated repository discovery is allowlist-only, and user URLs are protected against SSRF, internal redirects, oversized responses, and unsupported content types. Automated LeetCode crawling and search-result-page scraping remain disabled.
+
+A successful run is promoted only when at least `RAG_MIN_ASSERTING_TESTS` tests have expected outputs, every promoted code hash matches an independently passing sandbox verification, no timeout/failure occurred, and source policy plus secret scanning pass. “Verified” means verified against the available bounded test suite, not formally proven correct.
+
+Disable network discovery without disabling local reuse:
+
+```dotenv
+RAG_EXTERNAL_DISCOVERY_ENABLED=false
+```
+
+Backfill historical successful jobs and reconcile vector indexes safely:
+
+```powershell
+docker compose exec backend python -m app.rag.backfill_verified_corpus --dry-run
+docker compose exec backend python -m app.rag.backfill_verified_corpus --limit 100
+docker compose exec backend python -m app.rag.reconcile_qdrant --dry-run
+docker compose exec backend python -m app.rag.reconcile_qdrant
+```
+
 The app should not depend on the user providing URLs. Optional user URLs are accepted, but automatic retrieval starts from curated, approved sources:
 
 - CP-Algorithms

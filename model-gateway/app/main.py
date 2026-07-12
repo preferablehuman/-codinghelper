@@ -6,6 +6,7 @@ from app.config import get_settings
 from app.json_contract import StructuredOutputError, normalize_json_text, strict_json_retry_prompt
 from app.provider import get_provider
 from app.schemas import GenerateRequest, GenerateResponse
+from app.structured_schemas import validate_schema
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -65,11 +66,12 @@ def generate(request: GenerateRequest) -> GenerateResponse:
         prompt = request.prompt
         structured_attempts = 3 if request.json_mode else 1
         for attempt in range(1, structured_attempts + 1):
-            text = provider.generate(prompt, request.max_new_tokens, json_mode=request.json_mode)
+            text = provider.generate(prompt, request.max_new_tokens, json_mode=request.json_mode, schema_name=request.schema_name)
             if not request.json_mode:
                 break
             try:
                 text = normalize_json_text(text)
+                text = validate_schema(text, request.schema_name)
                 break
             except StructuredOutputError:
                 if attempt >= structured_attempts:

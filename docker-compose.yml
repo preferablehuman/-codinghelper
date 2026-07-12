@@ -122,6 +122,60 @@ services:
   #     retries: 180
   #     start_period: 15s
 
+
+  ollama:
+    profiles:
+      - ollama
+
+    image: ollama/ollama:latest
+    entrypoint: []
+    gpus: all
+
+    expose:
+      - "11434"
+
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+      - OLLAMA_MODEL=${OLLAMA_LLM_MODEL:-qwen2.5-coder:7b}
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:--1}
+      - OLLAMA_REQUIRE_GPU=${OLLAMA_REQUIRE_GPU:-true}
+      - OLLAMA_NUM_PARALLEL=${OLLAMA_NUM_PARALLEL:-1}
+      - OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAX_LOADED_MODELS:-1}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - VERBOSE_LOGGING=${VERBOSE_LOGGING:-false}
+      - LOG_DIR=/app/logs
+      - LOG_MAX_BYTES=${LOG_MAX_BYTES:-10485760}
+      - LOG_MAX_FILES=${LOG_MAX_FILES:-10}
+
+    volumes:
+      - ./data/ollama:/root/.ollama
+      - ./scripts/tee-rotate.sh:/logging/tee-rotate.sh:ro
+      - ./scripts/run-ollama.sh:/logging/run-ollama.sh:ro
+      - ./logs/ollama:/app/logs
+
+    command:
+      [
+        "/bin/sh",
+        "/logging/tee-rotate.sh",
+        "ollama",
+        "/bin/sh",
+        "/logging/run-ollama.sh"
+      ]
+
+    logging: *docker-log-options
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "test -f /tmp/ollama-gpu-ready && OLLAMA_HOST=127.0.0.1:11434 ollama list | grep -F \"${OLLAMA_LLM_MODEL:-qwen2.5-coder:7b}\" >/dev/null 2>&1"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 180
+      start_period: 15s
+
   postgres:
     image: postgres:16
     entrypoint: []

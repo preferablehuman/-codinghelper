@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 def generate_tests(runtime: BaseModelRuntime, problem_text: str, language: str, solution: dict[str, str]) -> list[dict[str, str | None]]:
     logger.info("Generating tests language=%s problem_chars=%s code_chars=%s", language, len(problem_text), len(solution.get("code", "")))
-    raw = runtime.generate(build_tests_prompt(problem_text, language, solution), max_new_tokens=4096, json_mode=True)
+    raw = runtime.generate(build_tests_prompt(problem_text, language, solution), max_new_tokens=4096, json_mode=True, schema_name="tests")
     try:
         data = _parse_test_payload(raw)
     except ValueError:

@@ -13,6 +13,7 @@ import { getJob, getJobStatus, rerunJob } from "../api/client";
 import CodeViewer from "../components/CodeViewer";
 import ExplanationTabs from "../components/ExplanationTabs";
 import JobProgress from "../components/JobProgress";
+import RetrievalProvenancePanel from "../components/RetrievalProvenancePanel";
 import SourceEvidencePanel from "../components/SourceEvidencePanel";
 import TestResultPanel from "../components/TestResultPanel";
 import type { JobDetail } from "../types/api";
@@ -81,6 +82,7 @@ export default function JobResultPage() {
 
   const latestExplanation = useMemo(() => job?.explanations.at(-1), [job]);
   const latestSlide = useMemo(() => job?.slide_artifacts.at(-1), [job]);
+  const verifiedSolutions = useMemo(() => job?.solutions.filter((solution) => solution.verification_status !== "FAILED") || [], [job]);
 
   if (error) {
     return <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">{error}</p>;
@@ -114,10 +116,11 @@ export default function JobResultPage() {
         </button>
         </div>
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          <HeaderMetric label="Approaches" value={String(job.solutions.length || 0)} />
+          <HeaderMetric label="Approaches" value={String(verifiedSolutions.length || 0)} />
           <HeaderMetric label="Tests" value={String(job.test_cases.length || 0)} />
           <HeaderMetric label="Pattern" value={job.detected_pattern || "detecting"} />
         </div>
+        <RetrievalProvenancePanel trace={job.retrieval_trace} />
       </div>
 
       <JobProgress job={job} />
@@ -155,16 +158,16 @@ export default function JobResultPage() {
           {activeTab === "explanation" ? (
             <ExplanationTabs
               explanation={latestExplanation}
-              solutions={job.solutions}
+              solutions={verifiedSolutions}
               tests={job.test_cases}
               verificationRuns={job.verification_runs}
               language={job.language}
               slide={latestSlide}
             />
           ) : null}
-          {activeTab === "code" ? <CodeViewer solutions={job.solutions} language={job.language} tests={job.test_cases} /> : null}
+          {activeTab === "code" ? <CodeViewer solutions={verifiedSolutions} language={job.language} tests={job.test_cases} /> : null}
           {activeTab === "tests" ? (
-            <TestResultPanel tests={job.test_cases} verificationRuns={job.verification_runs} solutions={job.solutions} language={job.language} />
+            <TestResultPanel tests={job.test_cases} verificationRuns={job.verification_runs} solutions={verifiedSolutions} language={job.language} />
           ) : null}
           {activeTab === "sources" ? <SourceEvidencePanel sources={job.sources} evidence={job.evidence_items} /> : null}
         </div>

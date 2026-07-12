@@ -32,7 +32,7 @@ def build_explanation(
 
 Your previous response was truncated or malformed. Return exactly one complete JSON object with all six requested fields. Shorten the prose and use compact dry-run tables so the JSON closes within the output limit. Do not wrap the object in an array or Markdown fence.
 """
-        raw = runtime.generate(prompt, max_new_tokens=8192, json_mode=True)
+        raw = runtime.generate(prompt, max_new_tokens=8192, json_mode=True, schema_name="explanation")
         try:
             data = parse_json_object(raw, wrapper_keys=("explanation", "result", "data"))
             break
