@@ -306,9 +306,129 @@ def _fallback_pseudocode(pattern: str) -> str:
 
 
 def _sanitize_code(code: str, language: str) -> str:
+    normalized = _strip_code_fence(code).strip()
     if language.lower() != "java":
+        return normalized
+    return _format_java_code(_ensure_java_standard_imports(normalized))
+
+
+def format_generated_code(code: str, language: str) -> str:
+    """Normalize model or corpus code before it is persisted and displayed."""
+    return _sanitize_code(code, language)
+
+
+def _strip_code_fence(code: str) -> str:
+    match = re.fullmatch(r"\s*```(?:[A-Za-z0-9_+.-]+)?\s*\n?(.*?)\n?```\s*", code, flags=re.DOTALL)
+    return match.group(1) if match else code
+
+
+def _format_java_code(code: str) -> str:
+    """Apply conservative indentation when a model returns minified Java.
+
+    The formatter only introduces whitespace after structural Java tokens. It
+    tracks strings, comments, and parenthesized expressions so literals and
+    the semicolons inside ``for (...)`` headers remain untouched.
+    """
+    if not code.strip():
         return code
-    return _ensure_java_standard_imports(code)
+
+    lines: list[str] = []
+    current: list[str] = []
+    indent = 0
+    paren_depth = 0
+    pending_space = False
+    state = "code"
+    quote = ""
+    escaped = False
+
+    def flush() -> None:
+        nonlocal current, pending_space
+        text = "".join(current).strip()
+        if text:
+            lines.append(f"{'    ' * indent}{text}")
+        current = []
+        pending_space = False
+
+    def append(value: str) -> None:
+        nonlocal pending_space
+        if pending_space and current and not current[-1].endswith((" ", "\t")) and value not in ";,.)]":
+            current.append(" ")
+        current.append(value)
+        pending_space = False
+
+    index = 0
+    while index < len(code):
+        char = code[index]
+        following = code[index + 1] if index + 1 < len(code) else ""
+
+        if state == "string":
+            current.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                state = "code"
+            index += 1
+            continue
+
+        if state == "line_comment":
+            if char in "\r\n":
+                flush()
+                state = "code"
+            else:
+                current.append(char)
+            index += 1
+            continue
+
+        if state == "block_comment":
+            current.append(char)
+            if char == "*" and following == "/":
+                current.append(following)
+                index += 2
+                state = "code"
+            else:
+                index += 1
+            continue
+
+        if char in {'"', "'"}:
+            append(char)
+            state = "string"
+            quote = char
+        elif char == "/" and following == "/":
+            append("//")
+            state = "line_comment"
+            index += 1
+        elif char == "/" and following == "*":
+            append("/*")
+            state = "block_comment"
+            index += 1
+        elif char.isspace():
+            pending_space = True
+        elif char == "(":
+            append(char)
+            paren_depth += 1
+        elif char == ")":
+            append(char)
+            paren_depth = max(0, paren_depth - 1)
+        elif char == "{" and paren_depth == 0:
+            append("{")
+            flush()
+            indent += 1
+        elif char == "}" and paren_depth == 0:
+            flush()
+            indent = max(0, indent - 1)
+            current.append("}")
+            flush()
+        elif char == ";" and paren_depth == 0:
+            append(char)
+            flush()
+        else:
+            append(char)
+        index += 1
+
+    flush()
+    return "\n".join(lines)
 
 
 def _ensure_java_standard_imports(code: str) -> str:

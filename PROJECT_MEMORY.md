@@ -476,3 +476,8 @@ logs/slide-renderer
   - Replaced them with one per-approach deep walkthrough containing the original supplied example, an annotated code stub, a state-variable model, a micro-step execution table tied to code phases, recursive call/return or iteration flow, and an invariant-based explanation of why each decision is valid.
   - Explanation generation now receives the full original problem statement so it can trace the given example rather than relying on the short analyzer summary or silently inventing inputs.
   - Live Combination Sum exact-reuse validation completed with three passing solutions and a 6,013-character unified walkthrough containing all required sections for all three approaches. Backend tests remained at 42 passed and 1 skipped; frontend TypeScript produced no compiler errors.
+- Code and test-result presentation hardening on 2026-07-14:
+  - Generated Java is now normalized at the persistence boundary: Markdown fences are removed and minified Java is conservatively expanded into indented structural lines without splitting strings or `for (...)` headers. Exact verified-corpus reuse passes through the same normalizer.
+  - Job `90c3ca5f-d0ff-4f94-bca3-dd64b77cb7b5` was rerun successfully. BRUTE_FORCE, IMPROVED, and OPTIMAL persisted as 36, 30, and 30 formatted lines respectively, and all passed 36 asserting tests.
+  - The Tests view retains aggregate status/pass/fail/average metrics at the top and, after execution, presents each test's status, returned stdout value, stderr when present, and individual runtime beside its input and expected value.
+  - Live UI verification confirmed 36 returned-value panels and 36 timing badges. The complete backend suite passed with 44 tests and 1 skip; frontend TypeScript passed.

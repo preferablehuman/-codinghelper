@@ -2,7 +2,7 @@ import { Play } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { executeCode } from "../api/client";
-import type { ExecutionResponse, GeneratedSolution, TestCase, VerificationRun } from "../types/api";
+import type { ExecutionResponse, ExecutionResultItem, GeneratedSolution, TestCase, VerificationRun } from "../types/api";
 
 export default function TestResultPanel({
   tests,
@@ -102,27 +102,62 @@ export default function TestResultPanel({
           {tests.length === 0 ? (
             <p className="p-4 text-sm text-zinc-500 dark:text-zinc-400">No tests generated yet.</p>
           ) : (
-            tests.map((test, index) => (
-              <div key={test.id} className="grid gap-3 p-5 md:grid-cols-2">
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Input {index + 1}</p>
-                  <pre className="mt-1 whitespace-pre-wrap rounded-md bg-zinc-950 p-3 font-mono text-xs text-zinc-100">
-                    {test.input_data || "(empty input)"}
-                  </pre>
+            tests.map((test, index) => {
+              const execution = resultForTest(runResult, index);
+              return (
+                <div key={test.id} className="p-5">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Test case {index + 1}</p>
+                    {execution ? (
+                      <div className="flex items-center gap-2 font-mono text-xs">
+                        <span className={execution.status === "PASSED" ? "text-emerald-600 dark:text-emerald-300" : "text-red-600 dark:text-red-300"}>
+                          {execution.status}
+                        </span>
+                        <span className="rounded bg-zinc-100 px-2 py-1 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
+                          {execution.execution_time_ms} ms
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className={`grid gap-3 ${execution ? "lg:grid-cols-3" : "md:grid-cols-2"}`}>
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Input</p>
+                      <pre className="mt-1 min-h-16 overflow-auto whitespace-pre-wrap rounded-md bg-zinc-950 p-3 font-mono text-xs text-zinc-100">
+                        {test.input_data || "(empty input)"}
+                      </pre>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Expected</p>
+                      <pre className="mt-1 min-h-16 overflow-auto whitespace-pre-wrap rounded-md bg-zinc-100 p-3 font-mono text-xs text-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
+                        {test.expected_output || "(none)"}
+                      </pre>
+                    </div>
+                    {execution ? (
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Returned value</p>
+                        <pre className="mt-1 min-h-16 overflow-auto whitespace-pre-wrap rounded-md bg-cyan-50 p-3 font-mono text-xs text-cyan-950 dark:bg-cyan-950/30 dark:text-cyan-100">
+                          {execution.stdout || "(empty output)"}
+                        </pre>
+                        {execution.stderr ? (
+                          <pre className="mt-2 overflow-auto whitespace-pre-wrap rounded-md bg-red-50 p-3 font-mono text-xs text-red-800 dark:bg-red-950/40 dark:text-red-200">
+                            {execution.stderr}
+                          </pre>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Expected</p>
-                  <pre className="mt-1 whitespace-pre-wrap rounded-md bg-zinc-100 p-3 font-mono text-xs text-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
-                    {test.expected_output || "(none)"}
-                  </pre>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </section>
     </div>
   );
+}
+
+function resultForTest(runResult: ExecutionResponse | null, testIndex: number): ExecutionResultItem | undefined {
+  return runResult?.results.find((result) => result.test_index === testIndex);
 }
 
 function preferredSolution(solutions: GeneratedSolution[]): GeneratedSolution | undefined {

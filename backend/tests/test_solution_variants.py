@@ -2,7 +2,7 @@ import json
 import pytest
 
 from app.model_runtime.base import BaseModelRuntime
-from app.solver.code_generator import _normalize_generated_text, _solutions_are_too_similar, generate_solution_variants
+from app.solver.code_generator import _normalize_generated_text, _solutions_are_too_similar, format_generated_code, generate_solution_variants
 
 
 class FakeRuntime(BaseModelRuntime):
@@ -152,3 +152,22 @@ def test_normalize_generated_text_bounds_excessive_content() -> None:
 def test_normalize_generated_text_rejects_blank_content() -> None:
     with pytest.raises(ValueError):
         _normalize_generated_text("   ", field_name="algorithm_pattern", max_length=300)
+
+
+def test_minified_java_is_formatted_without_splitting_for_header_or_strings() -> None:
+    code = 'public class Main { public static void main(String[] args) { for (int i = 0; i < 2; i++) { System.out.println("a;b"); } } }'
+
+    formatted = format_generated_code(code, "java")
+
+    assert "for (int i = 0; i < 2; i++) {" in formatted
+    assert 'System.out.println("a;b");' in formatted
+    assert len(formatted.splitlines()) >= 8
+    assert formatted.count("import java.util.*;") == 1
+    assert formatted.count("import java.io.*;") == 1
+
+
+def test_markdown_code_fence_is_removed_before_formatting() -> None:
+    formatted = format_generated_code("```java\nclass Main { public static void main(String[] args) {} }\n```", "java")
+
+    assert "```" not in formatted
+    assert "class Main {" in formatted
