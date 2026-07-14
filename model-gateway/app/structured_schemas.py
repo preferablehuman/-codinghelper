@@ -58,12 +58,28 @@ class Explanation(StrictPayload):
     complexity_analysis: Any
 
 
+class PatternLesson(StrictPayload):
+    display_name: str
+    overview: str
+    mental_model: str
+    recognition_cues: str
+    core_operations: str
+    invariants: str
+    worked_example: str
+    implementation_guide: str
+    complexity_tradeoffs: str
+    pitfalls: str
+    related_patterns: str
+    evidence_summary: str
+
+
 SCHEMAS = {
     "problem_analysis": TypeAdapter(ProblemAnalysis),
     "problem_equivalence": TypeAdapter(ProblemEquivalence),
     "solution": TypeAdapter(Solution),
     "tests": TypeAdapter(GeneratedTests),
     "explanation": TypeAdapter(Explanation),
+    "pattern_lesson": TypeAdapter(PatternLesson),
 }
 
 
@@ -91,5 +107,6 @@ def schema_model_for(schema_name: str | None) -> type[BaseModel] | None:
         "solution": Solution,
         "tests": GeneratedTests,
         "explanation": Explanation,
+        "pattern_lesson": PatternLesson,
     }
     return models.get(schema_name or "")

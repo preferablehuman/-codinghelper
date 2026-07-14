@@ -6,7 +6,7 @@ class GenerateRequest(BaseModel):
     prompt: str = Field(min_length=1)
     max_new_tokens: int = Field(default=1024, ge=1, le=65_536)
     json_mode: bool = False
-    schema_name: Literal["problem_analysis", "problem_equivalence", "solution", "tests", "explanation"] | None = None
+    schema_name: Literal["problem_analysis", "problem_equivalence", "solution", "tests", "explanation", "pattern_lesson"] | None = None
 
 
 class GenerateResponse(BaseModel):

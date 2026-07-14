@@ -104,6 +104,7 @@ def rerun_job(job_id: str, background_tasks: BackgroundTasks, db: Session = Depe
     job.progress_percent = 5
     job.current_step = "Queued for rerun"
     job.error_message = None
+    job.pattern_lesson_id = None
     job.completed_at = None
     db.commit()
     background_tasks.add_task(run_job_pipeline, job.id)

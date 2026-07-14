@@ -1,5 +1,6 @@
 import {
   BookOpenText,
+  BrainCircuit,
   FileStack,
   FlaskConical,
   PlaySquare,
@@ -7,20 +8,22 @@ import {
   type LucideIcon
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 
-import { getJob, getJobStatus, rerunJob } from "../api/client";
+import { getJob, getJobStatus, rerunJob, resolvePatternLesson } from "../api/client";
 import CodeViewer from "../components/CodeViewer";
 import ExplanationTabs from "../components/ExplanationTabs";
 import JobProgress from "../components/JobProgress";
+import PatternLessonPanel from "../components/PatternLessonPanel";
 import RetrievalProvenancePanel from "../components/RetrievalProvenancePanel";
 import SourceEvidencePanel from "../components/SourceEvidencePanel";
 import TestResultPanel from "../components/TestResultPanel";
-import type { JobDetail } from "../types/api";
+import type { JobDetail, PatternLesson } from "../types/api";
 
 const terminalStatuses = new Set(["COMPLETED", "FAILED"]);
 const resultTabs: { id: string; label: string; icon: LucideIcon }[] = [
   { id: "explanation", label: "Explanation", icon: BookOpenText },
+  { id: "pattern", label: "Pattern", icon: BrainCircuit },
   { id: "code", label: "Code", icon: PlaySquare },
   { id: "tests", label: "Tests", icon: FlaskConical },
   { id: "sources", label: "Sources", icon: FileStack }
@@ -28,9 +31,38 @@ const resultTabs: { id: string; label: string; icon: LucideIcon }[] = [
 
 export default function JobResultPage() {
   const { jobId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [job, setJob] = useState<JobDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("explanation");
+  const requestedTab = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState(resultTabs.some((tab) => tab.id === requestedTab) ? requestedTab || "explanation" : "explanation");
+  const [patternLesson, setPatternLesson] = useState<PatternLesson | null>(null);
+  const [patternReused, setPatternReused] = useState(false);
+  const [patternLoading, setPatternLoading] = useState(false);
+  const [patternError, setPatternError] = useState<string | null>(null);
+
+  function selectTab(tabId: string) {
+    setActiveTab(tabId);
+    const next = new URLSearchParams(searchParams);
+    if (tabId === "explanation") next.delete("tab");
+    else next.set("tab", tabId);
+    setSearchParams(next, { replace: true });
+  }
+
+  async function loadPatternLesson() {
+    if (!jobId || patternLoading) return;
+    setPatternLoading(true);
+    setPatternError(null);
+    try {
+      const resolution = await resolvePatternLesson(jobId);
+      setPatternLesson(resolution.lesson);
+      setPatternReused(resolution.reused);
+    } catch (err) {
+      setPatternError(err instanceof Error ? err.message : "Unable to load the pattern lesson");
+    } finally {
+      setPatternLoading(false);
+    }
+  }
 
   async function loadJob() {
     if (!jobId) {
@@ -46,7 +78,20 @@ export default function JobResultPage() {
 
   useEffect(() => {
     void loadJob();
+    setPatternLesson(null);
+    setPatternError(null);
   }, [jobId]);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab && resultTabs.some((item) => item.id === tab)) setActiveTab(tab);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (activeTab === "pattern" && job?.detected_pattern && terminalStatuses.has(job.status) && !patternLesson && !patternLoading && !patternError) {
+      void loadPatternLesson();
+    }
+  }, [activeTab, job?.detected_pattern, job?.status, patternLesson, patternLoading, patternError]);
 
   useEffect(() => {
     if (!job || terminalStatuses.has(job.status)) {
@@ -117,7 +162,9 @@ export default function JobResultPage() {
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
           <HeaderMetric label="Approaches" value={String(verifiedSolutions.length || 0)} />
           <HeaderMetric label="Tests" value={String(job.test_cases.length || 0)} />
-          <HeaderMetric label="Pattern" value={job.detected_pattern || "detecting"} />
+          <button type="button" onClick={() => selectTab("pattern")} disabled={!job.detected_pattern} className="focus-ring rounded-md text-left disabled:cursor-not-allowed">
+            <HeaderMetric label="Pattern · learn" value={job.detected_pattern || "detecting"} />
+          </button>
         </div>
         <RetrievalProvenancePanel trace={job.retrieval_trace} />
       </div>
@@ -138,7 +185,7 @@ export default function JobResultPage() {
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => selectTab(tab.id)}
                   className={`focus-ring flex h-11 w-full items-center gap-3 rounded-md px-3 text-left text-sm transition duration-200 ${
                     selected
                       ? "bg-zinc-950 text-emerald-300 shadow-sm dark:bg-white dark:text-zinc-950"
@@ -162,6 +209,24 @@ export default function JobResultPage() {
               verificationRuns={job.verification_runs}
               language={job.language}
             />
+          ) : null}
+          {activeTab === "pattern" ? (
+            patternLesson ? (
+              <PatternLessonPanel lesson={patternLesson} reused={patternReused} />
+            ) : patternLoading ? (
+              <div className="surface p-8 text-center">
+                <BrainCircuit size={28} className="mx-auto animate-pulse text-emerald-500" aria-hidden="true" />
+                <h2 className="mt-3 text-lg font-semibold text-zinc-950 dark:text-white">Preparing the {job.detected_pattern} lesson</h2>
+                <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">Checking the Pattern Library first, then using this job's evidence only if a reusable lesson does not exist.</p>
+              </div>
+            ) : patternError ? (
+              <div className="surface p-5">
+                <p className="text-sm text-red-700 dark:text-red-200">{patternError}</p>
+                <button type="button" onClick={() => void loadPatternLesson()} className="focus-ring mt-4 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Retry pattern lesson</button>
+              </div>
+            ) : (
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">Pattern learning becomes available when analysis completes.</p>
+            )
           ) : null}
           {activeTab === "code" ? <CodeViewer solutions={verifiedSolutions} language={job.language} tests={job.test_cases} /> : null}
           {activeTab === "tests" ? (

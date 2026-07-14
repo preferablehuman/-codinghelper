@@ -14,7 +14,7 @@ from app.runners.python_runner import run_python
 
 configure_logging()
 logger = logging.getLogger(__name__)
-app = FastAPI(title="Study Buddy Sandbox Runner", version="0.1.0")
+app = FastAPI(title="CodingHelper Sandbox Runner", version="0.1.0")
 
 
 class RunTest(BaseModel):

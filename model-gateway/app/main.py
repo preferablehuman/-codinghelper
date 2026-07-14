@@ -11,7 +11,7 @@ from app.structured_schemas import validate_schema
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger(__name__)
-app = FastAPI(title="Study Buddy Model Gateway", version="1.0.0")
+app = FastAPI(title="CodingHelper Model Gateway", version="1.0.0")
 startup_error: str | None = None
 
 

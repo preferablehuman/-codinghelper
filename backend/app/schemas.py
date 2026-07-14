@@ -109,6 +109,41 @@ class ExplanationOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PatternSourceRef(BaseModel):
+    title: str
+    url: str
+    source_name: str
+    source_tier: int
+
+
+class PatternLessonOut(BaseModel):
+    id: str
+    pattern_key: str
+    display_name: str
+    overview: str
+    mental_model: str
+    recognition_cues: str
+    core_operations: str
+    invariants: str
+    worked_example: str
+    implementation_guide: str
+    complexity_tradeoffs: str
+    pitfalls: str
+    related_patterns: str
+    evidence_summary: str
+    source_refs: list[PatternSourceRef] = Field(default_factory=list)
+    created_from_job_id: str | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PatternLessonResolution(BaseModel):
+    lesson: PatternLessonOut
+    reused: bool
+
+
 class SlideArtifactOut(BaseModel):
     id: str
     markdown_path: str

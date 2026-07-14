@@ -1,4 +1,4 @@
-I’ve been building Study Buddy — a coding explainer designed to teach the path from a brute-force idea to a verified, optimized solution.
+I’ve been building CodingHelper — a coding explainer designed to teach the path from a brute-force idea to a verified, optimized solution.
 
 Most coding tools stop after generating code. I wanted the product to answer the questions a learner actually has:
 
@@ -20,7 +20,7 @@ The current workflow:
 
 The model layer is provider-neutral through a LangChain-based gateway, so Gemini, NVIDIA-hosted models, Ollama, or another compatible provider can be selected through environment configuration without coupling the application to one model vendor.
 
-In the example shown here, Study Buddy retrieves three solution approaches and validates them against 36 available test cases. This is bounded test verification—not a formal proof—but it makes the learning output far more trustworthy than unexecuted generated code.
+In the example shown here, CodingHelper retrieves three solution approaches and validates them against 36 available test cases. This is bounded test verification—not a formal proof—but it makes the learning output far more trustworthy than unexecuted generated code.
 
 The biggest lesson from building this: generating an answer is the easy part. Turning it into a clear, executable, traceable learning experience is where the real product work begins.
 

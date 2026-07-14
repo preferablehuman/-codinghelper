@@ -6,7 +6,8 @@ import type {
   JobCreated,
   JobDetail,
   JobListItem,
-  JobStatusResponse
+  JobStatusResponse,
+  PatternLessonResolution
 } from "../types/api";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
@@ -73,4 +74,8 @@ export function executeCode(payload: ExecutionRequest): Promise<ExecutionRespons
     method: "POST",
     body: JSON.stringify(payload)
   });
+}
+
+export function resolvePatternLesson(jobId: string): Promise<PatternLessonResolution> {
+  return request<PatternLessonResolution>(`/api/jobs/${jobId}/pattern-lesson`, { method: "POST" });
 }

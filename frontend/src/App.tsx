@@ -14,12 +14,14 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   }`;
 
 type Theme = "light" | "dark";
+const THEME_STORAGE_KEY = "coding-helper-theme";
+const LEGACY_THEME_STORAGE_KEY = "study-buddy-theme";
 
 function initialTheme(): Theme {
   if (typeof window === "undefined") {
     return "dark";
   }
-  const stored = window.localStorage.getItem("study-buddy-theme");
+  const stored = window.localStorage.getItem(THEME_STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY);
   if (stored === "light" || stored === "dark") {
     return stored;
   }
@@ -31,7 +33,8 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
-    window.localStorage.setItem("study-buddy-theme", theme);
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    window.localStorage.removeItem(LEGACY_THEME_STORAGE_KEY);
   }, [theme]);
 
   return (
@@ -43,7 +46,7 @@ export default function App() {
               <Code2 size={19} aria-hidden="true" />
             </div>
             <div>
-              <p className="text-base font-semibold leading-tight text-zinc-950 dark:text-white">Study Buddy</p>
+              <p className="text-base font-semibold leading-tight text-zinc-950 dark:text-white">CodingHelper</p>
               <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400">local coding explainer</p>
             </div>
           </div>

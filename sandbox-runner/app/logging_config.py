@@ -26,16 +26,16 @@ def configure_logging(service_name: str = "sandbox-runner") -> None:
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(level)
     console_handler.setFormatter(formatter)
-    console_handler._study_buddy_handler = True  # type: ignore[attr-defined]
+    console_handler._coding_helper_handler = True  # type: ignore[attr-defined]
 
     file_handler = RotatingFileHandler(log_path, maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8")
     file_handler.setLevel(level)
     file_handler.setFormatter(formatter)
-    file_handler._study_buddy_handler = True  # type: ignore[attr-defined]
+    file_handler._coding_helper_handler = True  # type: ignore[attr-defined]
 
     root_logger = logging.getLogger()
     root_logger.handlers = [
-        handler for handler in root_logger.handlers if not getattr(handler, "_study_buddy_handler", False)
+        handler for handler in root_logger.handlers if not getattr(handler, "_coding_helper_handler", False)
     ]
     root_logger.setLevel(level)
     root_logger.addHandler(console_handler)

@@ -27,6 +27,7 @@ from app.explainer.explanation_generator import build_explanation
 from app.model_runtime.provider import get_model_runtime
 from app.orchestrator.job_manager import set_job_status
 from app.orchestrator.statuses import JobStatus
+from app.patterns.pattern_lesson import ensure_pattern_lesson
 from app.rag.chunker import chunk_text
 from app.rag.embeddings import embed_texts
 from app.rag.evidence_builder import build_claims
@@ -49,6 +50,15 @@ from app.verifier.sandbox_client import verify_code
 
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_pattern_lesson_safely(db, job: Job, runtime) -> None:
+    try:
+        lesson, reused = ensure_pattern_lesson(db, job, runtime)
+        logger.info("Pattern lesson ready job_id=%s pattern=%s lesson_id=%s reused=%s", job.id, job.detected_pattern, lesson.id, reused)
+    except Exception:
+        db.rollback()
+        logger.exception("Pattern lesson generation deferred job_id=%s pattern=%s", job.id, job.detected_pattern)
 
 
 def _format_evidence_text(
@@ -270,6 +280,7 @@ def _complete_exact_reuse(db, job: Job, decision: RetrievalDecision, reuse, norm
     explanation_data = build_explanation(runtime, explanation_context, primary.algorithm_pattern, solution_context, evidence_text, verification)
     db.add(Explanation(job_id=job.id, **explanation_data))
     db.commit()
+    _ensure_pattern_lesson_safely(db, job, runtime)
     set_job_status(db, job, JobStatus.COMPLETED)
     _store_retrieval_decision(db, job, decision, verification_status="PASSED", asserting_test_count=len([test for test in reuse.tests if test.get("expected_output") is not None]))
     promotion = promote_successful_job(db, job, normalized, signature, settings, decision.canonical_problem_id)
@@ -588,6 +599,7 @@ def run_job_pipeline(job_id: str) -> None:
             db.add(Explanation(job_id=job.id, **explanation_data))
             db.commit()
             logger.info("Generated explanation job_id=%s", job.id)
+            _ensure_pattern_lesson_safely(db, job, runtime)
 
             set_job_status(db, job, JobStatus.PROMOTING_KNOWLEDGE)
             promotion = promote_successful_job(db, job, normalized, signature, settings)

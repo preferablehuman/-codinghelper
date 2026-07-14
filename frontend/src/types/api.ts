@@ -158,6 +158,39 @@ export interface Explanation {
   complexity_analysis: string;
 }
 
+export interface PatternSourceRef {
+  title: string;
+  url: string;
+  source_name: string;
+  source_tier: number;
+}
+
+export interface PatternLesson {
+  id: string;
+  pattern_key: string;
+  display_name: string;
+  overview: string;
+  mental_model: string;
+  recognition_cues: string;
+  core_operations: string;
+  invariants: string;
+  worked_example: string;
+  implementation_guide: string;
+  complexity_tradeoffs: string;
+  pitfalls: string;
+  related_patterns: string;
+  evidence_summary: string;
+  source_refs: PatternSourceRef[];
+  created_from_job_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PatternLessonResolution {
+  lesson: PatternLesson;
+  reused: boolean;
+}
+
 export interface SlideArtifact {
   id: string;
   markdown_path: string;

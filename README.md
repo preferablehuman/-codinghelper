@@ -1,18 +1,18 @@
-# Study Buddy
+# CodingHelper
 
 > From a problem statement to a verified understanding — not just another generated answer.
 
-Study Buddy is an AI-assisted coding explainer for people who want to understand **how a solution evolves**, **why it works**, and **what the code is doing at every step**.
+CodingHelper is an AI-assisted coding explainer for people who want to understand **how a solution evolves**, **why it works**, and **what the code is doing at every step**.
 
-Paste a programming or DSA problem and Study Buddy builds a learning path from brute force to improved and optimal approaches. Each implementation is executable, checked in an isolated sandbox, and paired with a beginner-friendly explanation, state model, dry run, complexity analysis, and test-by-test output.
+Paste a programming or DSA problem and CodingHelper builds a learning path from brute force to improved and optimal approaches. Each implementation is executable, checked in an isolated sandbox, and paired with a beginner-friendly explanation, state model, dry run, complexity analysis, and test-by-test output.
 
-![Study Buddy problem workspace](artifacts/screenshots/Screenshot_14-7-2026_114032_localhost.jpeg)
+![CodingHelper problem workspace](artifacts/screenshots/Screenshot_14-7-2026_114032_localhost.jpeg)
 
 ## The idea
 
 Most coding assistants are optimized to produce an answer quickly. That is useful — until the learner is left with code they cannot explain, debug, or reproduce in an interview.
 
-Study Buddy is built around a different question:
+CodingHelper is built around a different question:
 
 **Can an AI coding tool help someone understand the path to the answer, not only reveal the answer?**
 
@@ -30,7 +30,7 @@ The result is a workspace that treats every problem as a small lesson:
 
 ### A solution ladder, not a single code dump
 
-Study Buddy presents distinct implementations side by side:
+CodingHelper presents distinct implementations side by side:
 
 - **Brute force** establishes the most direct mental model.
 - **Improved** shows which repeated work can be removed.
@@ -91,9 +91,21 @@ For every test case, it displays:
 
 > **Important:** “Verified” means the implementation passed the available bounded test suite. It is a strong engineering signal, not a formal proof of correctness.
 
+### A reusable Pattern Library
+
+Every completed problem exposes its detected algorithmic pattern as a learning path, not just a label. Open the **Pattern** tab—or select the pattern directly from the result header or History—to study:
+
+- the mental model and signals that help identify the pattern;
+- its core operations, data structures, and correctness invariant;
+- a worked example and implementation checklist;
+- complexity trade-offs, common pitfalls, and related patterns;
+- the evidence and coding sources that grounded the lesson.
+
+Pattern lessons are stored once under a normalized key. If a later solution uses the same pattern, CodingHelper links that job to the existing lesson instead of making another model request. This keeps repeat learning instant and reduces provider usage while preserving the original job that created the lesson.
+
 ## Retrieval-first, verification-gated learning
 
-Study Buddy does not treat every model response as a new source of truth.
+CodingHelper does not treat every model response as a new source of truth.
 
 It maintains a local solution corpus backed by PostgreSQL and Qdrant. Incoming problems are normalized and matched against previously verified knowledge before fresh generation begins.
 
@@ -174,7 +186,7 @@ Credentials remain inside the model-gateway container and are not included in fr
 
 ## Architecture
 
-Study Buddy runs as a modular Docker Compose application:
+CodingHelper runs as a modular Docker Compose application:
 
 | Service | Responsibility |
 | --- | --- |
@@ -229,7 +241,7 @@ Persistent state and caches live under `./data`; service logs live under `./logs
 
 ## Who this is for
 
-Study Buddy is useful for:
+CodingHelper is useful for:
 
 - learners moving from syntax knowledge to algorithmic reasoning;
 - interview preparation where explaining trade-offs matters as much as coding;
@@ -249,7 +261,7 @@ Study Buddy is useful for:
 
 ## The short version
 
-Study Buddy turns this:
+CodingHelper turns this:
 
 > “Here is the optimal code.”
 
@@ -265,7 +277,7 @@ That difference is the product.
 
 **I built an AI coding explainer that tries to teach the path — not just generate the final answer.**
 
-Study Buddy takes a DSA problem and turns it into a complete learning workspace:
+CodingHelper takes a DSA problem and turns it into a complete learning workspace:
 
 - → brute-force, improved, and optimal approaches
 - → beginner-first intuition and data-structure fundamentals

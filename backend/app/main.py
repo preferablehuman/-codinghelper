@@ -9,6 +9,7 @@ from sqlalchemy import select
 from app.api.routes_execute import router as execute_router
 from app.api.routes_health import router as health_router
 from app.api.routes_jobs import router as jobs_router
+from app.api.routes_patterns import job_router as job_patterns_router, router as patterns_router
 from app.api.routes_result_parts import router as result_parts_router
 from app.config import get_settings
 from app.db.models import Job
@@ -21,7 +22,7 @@ from app.orchestrator.statuses import JobStatus
 
 configure_logging()
 logger = logging.getLogger(__name__)
-app = FastAPI(title="Study Buddy Programming Explainer", version="0.1.0")
+app = FastAPI(title="CodingHelper Programming Explainer", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -33,6 +34,8 @@ app.add_middleware(
 
 app.include_router(health_router)
 app.include_router(jobs_router)
+app.include_router(patterns_router)
+app.include_router(job_patterns_router)
 app.include_router(result_parts_router)
 app.include_router(execute_router)
 

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 
-const root = await mkdtemp(path.join(os.tmpdir(), "studybuddy-slides-"));
+const root = await mkdtemp(path.join(os.tmpdir(), "coding-helper-slides-"));
 process.env.SLIDES_ROOT = root;
 const { parseDeck, renderDeck } = await import("./server.js");
 

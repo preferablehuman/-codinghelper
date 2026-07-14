@@ -195,7 +195,7 @@ function parseDeck(markdown, structuredDeck = null) {
   }
   const slides = splitMarkdownSlides(markdown).map(parseSlide).filter((slide) => slide.title || slide.bullets.length || slide.code);
   if (!slides.length) {
-    return [{ title: "Study Buddy Slides", bullets: ["No slide content was generated."], code: "", table: [], raw: "" }];
+    return [{ title: "CodingHelper Slides", bullets: ["No slide content was generated."], code: "", table: [], raw: "" }];
   }
   return slides.slice(0, 16);
 }
@@ -241,7 +241,7 @@ function addBaseSlide(pptx, slide, slideModel, index, total) {
     margin: 0,
     fit: "shrink"
   });
-  slide.addText(`Study Buddy  ${index + 1}/${total}`, {
+  slide.addText(`CodingHelper  ${index + 1}/${total}`, {
     x: 10.95,
     y: 7.05,
     w: 1.75,
@@ -271,7 +271,7 @@ function addTitleSlide(pptx, slide, slideModel, index, total) {
   slide.addText(objective, {
     x: 0.98, y: 5.35, w: 9.8, h: 0.7, fontSize: 18, color: "99F6E4", bold: true, margin: 0, fit: "shrink"
   });
-  slide.addText(`Study Buddy  ${index + 1}/${total}`, { x: 10.95, y: 7.05, w: 1.75, h: 0.24, fontSize: 9, color: "94A3B8", align: "right", margin: 0 });
+  slide.addText(`CodingHelper  ${index + 1}/${total}`, { x: 10.95, y: 7.05, w: 1.75, h: 0.24, fontSize: 9, color: "94A3B8", align: "right", margin: 0 });
 }
 
 function addTakeaway(pptx, slide, text, accent) {
@@ -486,10 +486,10 @@ function addCodeBlock(pptx, slide, code, x, y, w, h) {
 async function writePptx(jobDir, jobId, slides) {
   const pptx = new pptxgen();
   pptx.layout = "LAYOUT_WIDE";
-  pptx.author = "Study Buddy";
-  pptx.company = "Study Buddy";
+  pptx.author = "CodingHelper";
+  pptx.company = "CodingHelper";
   pptx.subject = "Programming problem explanation";
-  pptx.title = slides[0]?.title || "Study Buddy Slides";
+  pptx.title = slides[0]?.title || "CodingHelper Slides";
   pptx.lang = "en-US";
   pptx.theme = {
     headFontFace: "Aptos Display",
@@ -573,7 +573,7 @@ function renderHtml(slides) {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Study Buddy Slides</title>
+    <title>CodingHelper Slides</title>
     <style>
       body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #f8fafc; color: #111827; }
       main { max-width: 1040px; margin: 0 auto; padding: 28px 18px 48px; display: grid; gap: 18px; }

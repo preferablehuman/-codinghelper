@@ -29,7 +29,7 @@ def run_java(code: str, tests: list[dict[str, str | None]], timeout_seconds: int
         java_memory_mb,
         java_heap_mb,
     )
-    with tempfile.TemporaryDirectory(prefix="study-buddy-java-", dir=work_dir) as temp_name:
+    with tempfile.TemporaryDirectory(prefix="coding-helper-java-", dir=work_dir) as temp_name:
         temp_dir = Path(temp_name)
         source = temp_dir / f"{class_name}.java"
         source.write_text(code, encoding="utf-8")

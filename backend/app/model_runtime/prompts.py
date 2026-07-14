@@ -374,3 +374,53 @@ Verification:
 Solution:
 {solution}
 """
+
+
+def pattern_lesson_prompt(
+    pattern_key: str,
+    display_name: str,
+    problem_summary: str,
+    evidence: list[str],
+    source_refs: list[dict[str, object]],
+    approaches: list[dict[str, object]],
+) -> str:
+    return f"""Create a reusable, beginner-first lesson about the algorithm pattern `{pattern_key}`.
+
+Return exactly one JSON object with these string fields:
+- display_name
+- overview
+- mental_model
+- recognition_cues
+- core_operations
+- invariants
+- worked_example
+- implementation_guide
+- complexity_tradeoffs
+- pitfalls
+- related_patterns
+- evidence_summary
+
+Teaching requirements:
+- Explain the pattern itself, not only the supplied programming problem.
+- Start from first principles and define every data structure before using it.
+- Show how a learner recognizes this pattern from constraints, input shape, and repeated-work clues.
+- Explain state transitions and the invariant that makes the pattern correct.
+- `core_operations` must describe the operations used, their usual costs, and what each stored value means.
+- `worked_example` must be a concrete micro-step trace with state before, decision, action, and state after. Use Markdown, including a table when helpful.
+- `implementation_guide` must contain language-neutral pseudocode and a checklist for translating it into code.
+- `complexity_tradeoffs` must explain best/typical/worst costs when they differ, auxiliary memory, and when another pattern is preferable.
+- `pitfalls` must include correctness, boundaries, duplicates, mutation, and performance traps relevant to the pattern.
+- `related_patterns` must compare close alternatives and explain how to choose between them.
+- Ground claims in the supplied evidence and approaches. Do not cite sources that are not supplied.
+- Write a durable lesson that can be reused across future problems using the same normalized pattern.
+- Format multi-point content as real Markdown lists with one item per line; never place an entire numbered list on one line.
+- Keep Markdown tables on separate lines with a header separator row so the lesson UI can render them accessibly.
+- Prefer completeness and clarity over brevity.
+
+Normalized pattern: {pattern_key}
+Display name hint: {display_name}
+Problem that first motivated this lesson: {problem_summary}
+Evidence claims: {evidence}
+Approved source references: {source_refs}
+Verified solution approaches: {approaches}
+"""

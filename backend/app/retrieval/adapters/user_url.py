@@ -41,7 +41,7 @@ class UserURLAdapter(RetrievalAdapter):
             current = url
             for _ in range(settings.external_fetch_max_redirects + 1):
                 validate_public_url(current)
-                with httpx.stream("GET", current, timeout=settings.external_fetch_timeout_seconds, follow_redirects=False, headers={"user-agent": "StudyBuddy/1.0"}) as response:
+                with httpx.stream("GET", current, timeout=settings.external_fetch_timeout_seconds, follow_redirects=False, headers={"user-agent": "CodingHelper/1.0"}) as response:
                     if response.is_redirect:
                         current = urljoin(current, response.headers.get("location", ""))
                         continue

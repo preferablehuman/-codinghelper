@@ -1,4 +1,4 @@
-import { RefreshCw, Trash2 } from "lucide-react";
+import { BrainCircuit, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -84,7 +84,14 @@ export default function JobHistoryPage() {
                   </td>
                   <td className="px-5 py-4 text-zinc-700 dark:text-zinc-300">{job.status}</td>
                   <td className="px-5 py-4 text-zinc-700 dark:text-zinc-300">{job.language}</td>
-                  <td className="px-5 py-4 text-zinc-700 dark:text-zinc-300">{job.detected_pattern || "-"}</td>
+                  <td className="px-5 py-4 text-zinc-700 dark:text-zinc-300">
+                    {job.detected_pattern ? (
+                      <Link to={`/jobs/${job.id}?tab=pattern`} className="focus-ring inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 font-mono text-xs text-emerald-700 transition hover:bg-emerald-100 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200 dark:hover:bg-emerald-950/70">
+                        <BrainCircuit size={13} aria-hidden="true" />
+                        {job.detected_pattern}
+                      </Link>
+                    ) : "-"}
+                  </td>
                   <td className="px-5 py-4 text-zinc-700 dark:text-zinc-300">{new Date(job.created_at).toLocaleString()}</td>
                   <td className="px-5 py-4 text-right">
                     <button

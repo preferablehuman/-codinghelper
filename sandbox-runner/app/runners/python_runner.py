@@ -17,7 +17,7 @@ def run_python(code: str, tests: list[dict[str, str | None]], timeout_seconds: i
     if work_dir:
         Path(work_dir).mkdir(parents=True, exist_ok=True)
     logger.info("Python runner starting code_chars=%s test_count=%s work_dir=%s", len(code), len(tests), work_dir or "tmp")
-    with tempfile.TemporaryDirectory(prefix="study-buddy-python-", dir=work_dir) as temp_name:
+    with tempfile.TemporaryDirectory(prefix="coding-helper-python-", dir=work_dir) as temp_name:
         temp_dir = Path(temp_name)
         script = temp_dir / "solution.py"
         script.write_text(code, encoding="utf-8")

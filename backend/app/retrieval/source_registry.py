@@ -144,7 +144,7 @@ def _fetch_source(source: RetrievedSource) -> RetrievedSource:
         logger.warning("Source fetch denied by compliance policy source=%s", source.source_name)
         return source
     try:
-        response = httpx.get(source.url, timeout=8.0, follow_redirects=True, headers={"user-agent": "StudyBuddyBot/0.2"})
+        response = httpx.get(source.url, timeout=8.0, follow_redirects=True, headers={"user-agent": "CodingHelperBot/0.2"})
         response.raise_for_status()
     except Exception as exc:
         logger.warning("Source fetch failed url=%s error=%s", source.url, exc)

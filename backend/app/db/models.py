@@ -33,6 +33,7 @@ class Job(Base):
     current_step: Mapped[str] = mapped_column(Text, nullable=False, default="Queued")
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     detected_pattern: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    pattern_lesson_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("pattern_lessons.id", ondelete="SET NULL"), nullable=True)
     problem_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     retrieval_trace_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
@@ -46,6 +47,7 @@ class Job(Base):
     verification_runs: Mapped[list[VerificationRun]] = relationship(back_populates="job", cascade="all, delete-orphan")
     explanations: Mapped[list[Explanation]] = relationship(back_populates="job", cascade="all, delete-orphan")
     slide_artifacts: Mapped[list[SlideArtifact]] = relationship(back_populates="job", cascade="all, delete-orphan")
+    pattern_lesson: Mapped[PatternLesson | None] = relationship(back_populates="jobs", foreign_keys=[pattern_lesson_id])
 
     @property
     def retrieval_trace(self) -> dict[str, object] | None:
@@ -173,6 +175,40 @@ class Explanation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     job: Mapped[Job] = relationship(back_populates="explanations")
+
+
+class PatternLesson(Base):
+    __tablename__ = "pattern_lessons"
+    __table_args__ = (UniqueConstraint("pattern_key", name="uq_pattern_lessons_pattern_key"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    pattern_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    overview: Mapped[str] = mapped_column(Text, nullable=False)
+    mental_model: Mapped[str] = mapped_column(Text, nullable=False)
+    recognition_cues: Mapped[str] = mapped_column(Text, nullable=False)
+    core_operations: Mapped[str] = mapped_column(Text, nullable=False)
+    invariants: Mapped[str] = mapped_column(Text, nullable=False)
+    worked_example: Mapped[str] = mapped_column(Text, nullable=False)
+    implementation_guide: Mapped[str] = mapped_column(Text, nullable=False)
+    complexity_tradeoffs: Mapped[str] = mapped_column(Text, nullable=False)
+    pitfalls: Mapped[str] = mapped_column(Text, nullable=False)
+    related_patterns: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    source_refs_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    created_from_job_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("jobs.id", ondelete="SET NULL", use_alter=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+    jobs: Mapped[list[Job]] = relationship(back_populates="pattern_lesson", foreign_keys="Job.pattern_lesson_id")
+
+    @property
+    def source_refs(self) -> list[dict[str, object]]:
+        try:
+            value = json.loads(self.source_refs_json or "[]")
+            return value if isinstance(value, list) else []
+        except json.JSONDecodeError:
+            return []
 
 
 class SlideArtifact(Base):

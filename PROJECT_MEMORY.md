@@ -1,4 +1,4 @@
-# Study Buddy Programming Explainer - Project Memory
+# CodingHelper Programming Explainer - Project Memory
 
 ## Project Objective
 
@@ -30,6 +30,8 @@ Seven default Docker Compose services plus one optional local-model service:
 Core rule: PostgreSQL stores application state. Qdrant stores embeddings. The backend orchestrates jobs through a stable model-gateway contract and has no provider-specific dependencies. The sandbox runs generated code. The slide renderer handles deck artifacts.
 
 ## Current Status
+
+- Product name: CodingHelper. The workspace directory and historical Docker container names still contain `study buddy`/`studybuddy` for compatibility with the existing local installation and persisted data.
 
 - Status: MVP scaffold completed with a provider-neutral internal model gateway. The backend remains available when the configured LLM is degraded, and the frontend uses a same-origin `/api` proxy. Gemini is selected in the current local environment; its configured auth key currently receives Google `401 ACCESS_TOKEN_TYPE_UNSUPPORTED`, so model generation remains degraded until that external credential is repaired or replaced.
 - Last updated: 2026-07-11
@@ -482,3 +484,10 @@ logs/slide-renderer
   - The Tests view retains aggregate status/pass/fail/average metrics at the top and, after execution, presents each test's status, returned stdout value, stderr when present, and individual runtime beside its input and expected value.
   - Live UI verification confirmed 36 returned-value panels and 36 timing badges. The complete backend suite passed with 44 tests and 1 skip; frontend TypeScript passed.
   - Follow-up solution targeting added explicit per-approach selection to the Tests view. Stored verification metrics, interactive results, and execution code are scoped to the selected solution. The Explanation proof run now explicitly identifies and executes its currently selected explanation approach, clearing stale results whenever the selection changes.
+- Reusable Pattern Library on 2026-07-14:
+  - Added a dedicated Pattern tab to completed job results. The detected pattern in the result header opens the tab, and every History row links its pattern directly to the same learning view.
+  - Pattern lessons teach the mental model, recognition cues, operations and data structures, invariant, worked example, implementation guide, complexity trade-offs, pitfalls, related patterns, and supporting evidence/sources.
+  - Added the `pattern_lessons` knowledge table and nullable job link in migration `0004_pattern_lessons`. A normalized unique pattern key allows lessons to be reused across unrelated jobs without coupling them to one solution run.
+  - Lesson resolution checks the job link and global Pattern Library before requesting structured model output. Historical jobs generate lazily on first open; new pipelines populate safely without making lesson failure fail the verified solution job.
+  - Model-gateway now validates the provider-neutral `pattern_lesson` schema. Provider selection and LangChain routing remain behind the existing gateway boundary.
+  - Live validation on job `90c3ca5f-d0ff-4f94-bca3-dd64b77cb7b5` generated the Simulation lesson in 5.8 seconds. A second resolution returned the same lesson ID in 294 ms with `reused=true`, and the library count remained one.
