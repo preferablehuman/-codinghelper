@@ -1,96 +1,151 @@
-# Study Buddy Programming Explainer
+# Study Buddy
 
-Study Buddy is a programming explanation assistant. It accepts a programming or DSA problem, builds a grounded evidence pack, generates solutions through a provider-neutral model gateway, verifies code in a sandbox, and displays an interactive explanation.
+> From a problem statement to a verified understanding — not just another generated answer.
 
-## Architecture
+Study Buddy is an AI-assisted coding explainer for people who want to understand **how a solution evolves**, **why it works**, and **what the code is doing at every step**.
 
-The default project runs as seven Docker Compose services, with Ollama available as an optional eighth service:
+Paste a programming or DSA problem and Study Buddy builds a learning path from brute force to improved and optimal approaches. Each implementation is executable, checked in an isolated sandbox, and paired with a beginner-friendly explanation, state model, dry run, complexity analysis, and test-by-test output.
 
-- `frontend`: React, Vite, TypeScript, Tailwind UI
-- `backend`: provider-neutral FastAPI orchestration, persistence, and RAG modules
-- `model-gateway`: stable internal `/health` and `/generate` API with provider adapters
-- `postgres`: relational state for jobs, results, metadata, history
-- `qdrant`: vector database for source chunks and semantic retrieval
-- `sandbox-runner`: isolated Python and Java code execution
-- `ollama` (optional): local GGUF model serving when the gateway is configured for Ollama
+![Study Buddy problem workspace](artifacts/screenshots/Screenshot_14-7-2026_114032_localhost.jpeg)
 
-PostgreSQL is the application source of truth. Qdrant stores embeddings. The backend orchestrates jobs but has no Gemini/Ollama knowledge; all LLM calls cross the model-gateway API. Generated code only runs in `sandbox-runner`.
+## The idea
 
-## Local Data And Live Code Mounts
+Most coding assistants are optimized to produce an answer quickly. That is useful — until the learner is left with code they cannot explain, debug, or reproduce in an interview.
 
-All persistent container data is directed into `./data`:
+Study Buddy is built around a different question:
 
-- `data/postgres`: PostgreSQL cluster data
-- `data/qdrant`: Qdrant vector storage
-- `data/backend/artifacts`: backend generated artifacts
-- `data/backend/model-cache`: local model files
-- `data/backend/source-cache`: source cache
-- `data/ollama`: persistent Ollama model store
-- `data/frontend/node_modules` and `data/frontend/npm-cache`: frontend dependency/runtime cache
-- `data/sandbox-runner/work`: temporary generated-code execution work area, cleaned per run
+**Can an AI coding tool help someone understand the path to the answer, not only reveal the answer?**
 
-The code for `frontend`, `backend`, `model-gateway`, and `sandbox-runner` is bind-mounted into their containers. Python services run with reload enabled.
+The result is a workspace that treats every problem as a small lesson:
 
-## Quick Start
+1. Understand the statement and constraints.
+2. Retrieve relevant algorithm knowledge and previously verified material.
+3. Generate meaningfully different solution approaches.
+4. Execute every displayed implementation against an asserting test suite.
+5. Explain the intuition, state, control flow, and trade-offs from first principles.
+6. Show the actual returned value and runtime for every test case.
+7. Reuse trusted solutions when the same problem appears again — while verifying them again.
 
-```powershell
-cd "D:\Development\study buddy"
-copy .env.example .env
-docker compose up --build
+## What the learner receives
+
+### A solution ladder, not a single code dump
+
+Study Buddy presents distinct implementations side by side:
+
+- **Brute force** establishes the most direct mental model.
+- **Improved** shows which repeated work can be removed.
+- **Expected solution** demonstrates the strongest verified approach produced for the problem.
+
+Similar intuition is allowed when the implementation, data structure, state representation, or control flow is genuinely different. This makes the comparison useful instead of presenting three renamed copies of the same algorithm.
+
+![Three generated approaches](artifacts/screenshots/Screenshot_14-7-2026_114230_localhost.jpeg)
+
+### An explanation designed for someone learning the topic
+
+Each approach becomes a continuous lesson containing:
+
+- foundations and prerequisite ideas;
+- the central intuition;
+- the data structures and state variables;
+- an annotated logic stub;
+- the supplied example traced through the algorithm;
+- step-by-step state transitions;
+- iteration, recursion, or call-and-return flow;
+- why each important decision is valid;
+- common mistakes and edge cases;
+- time and space complexity, with the reason behind each bound.
+
+The goal is not to decorate generated code with a paragraph. The goal is to help a learner follow the execution deeply enough to explain it in their own words.
+
+![Beginner-first execution walkthrough](artifacts/screenshots/Screenshot_14-7-2026_124124_localhost.jpeg)
+
+### Readable, runnable implementations
+
+Generated code is normalized before it is stored and displayed. Java imports, methods, loops, conditions, and statements are formatted into readable lines, while strings and `for (...)` headers are preserved correctly.
+
+The code workspace also supports:
+
+- switching between generated approaches;
+- editing a selected implementation;
+- running custom standard input;
+- supplying an optional expected output;
+- executing the complete generated test suite;
+- inspecting stdout, stderr, status, and timing.
+
+![Formatted executable code](artifacts/screenshots/Screenshot_14-7-2026_124139_localhost.jpeg)
+
+### Verification you can inspect
+
+Every displayed approach is run independently. The Tests workspace lets the learner choose exactly which solution to execute and keeps aggregate metrics at the top.
+
+For every test case, it displays:
+
+- input;
+- expected value;
+- actual returned value;
+- pass or fail status;
+- individual runtime;
+- error output when present.
+
+![Per-test returned values and runtimes](artifacts/screenshots/Screenshot_14-7-2026_124214_localhost.jpeg)
+
+> **Important:** “Verified” means the implementation passed the available bounded test suite. It is a strong engineering signal, not a formal proof of correctness.
+
+## Retrieval-first, verification-gated learning
+
+Study Buddy does not treat every model response as a new source of truth.
+
+It maintains a local solution corpus backed by PostgreSQL and Qdrant. Incoming problems are normalized and matched against previously verified knowledge before fresh generation begins.
+
+```mermaid
+flowchart LR
+    A[Problem statement] --> B[Normalize and match]
+    B --> C{Trusted match?}
+    C -->|Exact| D[Retrieve verified solutions]
+    C -->|Related| E[Build grounded evidence]
+    C -->|No match| F[Generate fresh approaches]
+    D --> G[Re-run asserting tests]
+    E --> F
+    F --> G
+    G --> H{All checks pass?}
+    H -->|Yes| I[Teach and optionally promote]
+    H -->|No| J[Repair or reject]
 ```
 
-After the first build, code changes can usually be picked up with:
+The retrieval routes are deliberately separated:
 
-```powershell
-docker compose restart backend
-docker compose restart model-gateway
-docker compose restart sandbox-runner
-docker compose restart frontend
+- `EXACT_REUSE` re-runs stored implementations against stored asserting tests.
+- `EQUIVALENT_ADAPT` changes only language or I/O details, then verifies the adaptation.
+- `RELATED_GROUNDING` uses related material for intuition, invariants, edge cases, and testing guidance.
+- `EXTERNAL_DISCOVERY` uses approved adapters and treats retrieved code as untrusted until execution succeeds.
+- `GENERATE_FRESH` builds new grounded approaches when reusable knowledge is unavailable.
+
+Successful work enters the reusable corpus only when verification, source-policy, minimum-test, code-hash, and secret-scanning safeguards pass.
+
+![Verified solution reuse](artifacts/screenshots/Screenshot_14-7-2026_124124_localhost.jpeg)
+
+## Provider-neutral model orchestration
+
+The application backend does not know whether generation comes from Gemini, NVIDIA-hosted models, OpenAI, an OpenAI-compatible API, or local Ollama.
+
+All model interaction crosses a stable internal model-gateway API. LangChain owns provider-specific integration inside that gateway, and provider selection happens through environment variables.
+
+```mermaid
+flowchart LR
+    UI[React UI] --> API[FastAPI backend]
+    API --> GW[Model gateway]
+    GW --> NVIDIA[NVIDIA]
+    GW --> Gemini[Gemini]
+    GW --> OpenAI[OpenAI compatible]
+    GW --> Ollama[Local Ollama]
+    API --> PG[(PostgreSQL)]
+    API --> QD[(Qdrant)]
+    API --> SB[Sandbox runner]
 ```
 
-Open:
+Changing providers does not require changes to the pipeline, database, frontend, or explanation logic. Each provider keeps its own model, credential, JSON-model, and endpoint properties; `LLM_PROVIDER` selects the active block.
 
-- Frontend: http://localhost:5173
-- Backend health: http://localhost:8000/api/health
-- Model gateway: internal-only at `http://model-gateway:8300`; inspect readiness through backend `/api/health`
-- Sandbox health: http://localhost:8100/health
-- Qdrant: http://localhost:6333
-
-## Developer Commands
-
-```powershell
-make up
-make down
-make logs
-make migrate
-make test-backend
-make test-sandbox
-```
-
-On Windows without `make`, run the equivalent Docker Compose commands from the `Makefile`.
-
-## Logging
-
-Every service writes logs to the console and to `./logs/<service>/` on the host:
-
-- `logs/frontend/frontend.log`
-- `logs/backend/backend.log`
-- `logs/backend/backend-console.log`
-- `logs/ollama/ollama.log`
-- `logs/postgres/postgres.log`
-- `logs/qdrant/qdrant.log`
-- `logs/sandbox-runner/sandbox-runner.log`
-- `logs/sandbox-runner/sandbox-runner-console.log`
-
-File logs rotate at `LOG_MAX_BYTES=10485760` and keep `LOG_MAX_FILES=10` files total by default. Docker console logs are also capped at 10 files of 10 MB per service.
-
-Set `VERBOSE_LOGGING=true` in `.env` before starting Compose to enable debug-level app logs and more detailed service output. PostgreSQL and Qdrant can be tuned further with `POSTGRES_LOG_*` and `QDRANT_LOG_LEVEL` in `.env`.
-
-## Model Gateway
-
-The application talks only to `MODEL_GATEWAY_URL`. Provider selection, credentials, model names, retries, and provider-specific HTTP formats belong exclusively to `model-gateway`.
-
-For NVIDIA hosted models, configure `.env`:
+Example NVIDIA configuration:
 
 ```dotenv
 LLM_PROVIDER=nvidia
@@ -100,7 +155,7 @@ NVIDIA_LLM_API_KEY=your_nvidia_api_key
 NVIDIA_LLM_BASE_URL=https://integrate.api.nvidia.com/v1
 ```
 
-Provider interaction is implemented with LangChain. Supported values are `nvidia`, `gemini`, `ollama`, `openai`, and `openai_compatible`. Switching to a local Ollama model requires only environment changes:
+Example local Ollama configuration:
 
 ```dotenv
 LLM_PROVIDER=ollama
@@ -109,93 +164,124 @@ OLLAMA_LLM_JSON_MODEL=
 OLLAMA_LLM_BASE_URL=http://ollama:11434
 ```
 
-Restart only the gateway after changing providers or keys:
+After changing provider settings, restart only the gateway:
 
 ```powershell
 docker compose restart model-gateway
 ```
 
-Each provider keeps its own model, JSON model, credential, and endpoint values. The gateway reads only the block selected by `LLM_PROVIDER`, so switching providers does not require rewriting or losing the previous provider's configuration. Credentials are available only to the gateway container and are never included in the frontend bundle or normal API responses. LangChain owns provider-specific SDK behavior inside the gateway; the application backend, pipeline, and frontend contract remain unchanged.
+Credentials remain inside the model-gateway container and are not included in frontend bundles or normal application responses.
 
-The backend intentionally stays online when the model gateway is degraded. `/api/health` reports model readiness, while history and other non-generation features continue working. Provider failures therefore appear as explicit job/gateway errors instead of browser-level `Failed to fetch` messages.
+## Architecture
 
-The frontend sends `/api` requests to its own origin and Vite proxies them internally to `backend:8000`. This avoids browser coupling to `localhost:8000` and works when the UI is opened from another device on the network.
+Study Buddy runs as a modular Docker Compose application:
 
-The solution ladder is generated as separate structured requests for brute-force, optional improved, and optimal implementations. This prevents a truncated combined response from silently producing only one approach.
+| Service | Responsibility |
+| --- | --- |
+| `frontend` | React, Vite, TypeScript, Tailwind learning workspace |
+| `backend` | FastAPI orchestration, RAG, persistence, and job lifecycle |
+| `model-gateway` | LangChain provider adapters and structured model output |
+| `postgres` | Application state, canonical problems, solutions, tests, and provenance |
+| `qdrant` | Semantic indexes referencing authoritative PostgreSQL records |
+| `sandbox-runner` | Isolated Java and Python compilation and execution |
+| `ollama` | Optional local model service enabled through its Compose profile |
 
-The job pipeline calls the configured model runtime for solution generation, test generation, explanation generation, and slide markdown generation. If the model cannot load or returns malformed structured output, the job is marked failed instead of silently using a deterministic placeholder.
+PostgreSQL is the source of truth. Qdrant stores embeddings and stable record identifiers. Generated code runs only in the sandbox service.
 
-## Retrieval Knowledge Base
+## Quick start
 
-Study Buddy uses a retrieval-first, verification-gated corpus. PostgreSQL owns complete canonical problems, variants, reusable implementations, asserting tests, provenance, compliance metadata, and verification records. Qdrant contains embeddings plus stable PostgreSQL IDs; its payloads are never authoritative content.
+### Requirements
 
-```mermaid
-flowchart TD
-    A[Incoming problem] --> B[Deterministic normalization and exact lookup]
-    B --> C[Local PostgreSQL and Qdrant corpus search]
-    C --> D[Compatibility and contradiction gate]
-    D --> E[Approved external adapter discovery]
-    E --> F[Policy-aware ingestion]
-    F --> G[Grounded model adaptation or fresh synthesis]
-    G --> H[Sandbox verification of every displayed variant]
-    H --> I[Explanation and teaching deck]
-    I --> J[Successful-run promotion]
-    J --> K[PostgreSQL source of truth and Qdrant indexes]
-```
+- Docker Desktop with Docker Compose
+- An API key for a configured hosted provider, or a local Ollama setup
+- Enough local resources for the selected model and services
 
-Retrieval routes are deliberately distinct:
-
-- `EXACT_REUSE`: re-run a verified implementation and stored asserting tests without fresh algorithm generation.
-- `EQUIVALENT_ADAPT`: adapt only language or I/O differences, then verify before reuse.
-- `RELATED_GROUNDING`: use related knowledge only for intuition, invariants, tests, and pitfalls.
-- `EXTERNAL_DISCOVERY`: query approved adapters; retrieved code remains untrusted until sandbox verification.
-- `GENERATE_FRESH`: use the existing grounded generation path when no reusable match exists.
-
-Stack Exchange uses its official API, Codeforces uses official metadata only, curated repository discovery is allowlist-only, and user URLs are protected against SSRF, internal redirects, oversized responses, and unsupported content types. Automated LeetCode crawling and search-result-page scraping remain disabled.
-
-A successful run is promoted only when at least `RAG_MIN_ASSERTING_TESTS` tests have expected outputs, every promoted code hash matches an independently passing sandbox verification, no timeout/failure occurred, and source policy plus secret scanning pass. “Verified” means verified against the available bounded test suite, not formally proven correct.
-
-Disable network discovery without disabling local reuse:
-
-```dotenv
-RAG_EXTERNAL_DISCOVERY_ENABLED=false
-```
-
-Backfill historical successful jobs and reconcile vector indexes safely:
+### Run the application
 
 ```powershell
-docker compose exec backend python -m app.rag.backfill_verified_corpus --dry-run
-docker compose exec backend python -m app.rag.backfill_verified_corpus --limit 100
-docker compose exec backend python -m app.rag.reconcile_qdrant --dry-run
-docker compose exec backend python -m app.rag.reconcile_qdrant
+cd "D:\Development\study buddy"
+Copy-Item .env.example .env
+# Add the credential and model for your selected provider.
+docker compose up --build
 ```
 
-The app should not depend on the user providing URLs. Optional user URLs are accepted, but automatic retrieval starts from curated, approved sources:
+Open [http://localhost:5173](http://localhost:5173).
 
-- CP-Algorithms
-- The Algorithms GitHub organization
-- Official Python documentation
-- Official Java documentation
-- Stack Exchange and Codeforces APIs where adapters are implemented
-- GeeksforGeeks only with the restricted snippet/citation policy
+Useful endpoints:
 
-The retrieval layer should prefer open/cacheable sources and store only metadata/snippets for restricted sources.
+- Frontend: `http://localhost:5173`
+- Backend health: `http://localhost:8000/api/health`
+- Sandbox health: `http://localhost:8100/health`
+- Qdrant: `http://localhost:6333`
 
-## Project Working Guidelines
+The model gateway is internal at `http://model-gateway:8300`. Its readiness is surfaced through the backend health response.
 
-- Start every session by reading `PROJECT_MEMORY.md`.
-- End every implementation session by updating `PROJECT_MEMORY.md`.
-- Prefer the simplest understandable implementation that satisfies the requirement.
-- Touch only files directly required for the change.
-- Ask when a product, hardware, data, or behavior choice materially affects the result and cannot be discovered from project context.
-- Do not invent unsupported technical choices; document selected defaults and the reason for them.
+### Common development commands
 
-## Limitations
+```powershell
+docker compose up -d --build
+docker compose logs -f backend model-gateway sandbox-runner
+docker compose restart frontend backend model-gateway sandbox-runner
+docker compose down
+```
 
-- The system does not guarantee correctness.
-- Online sources improve grounding but do not prove correctness.
-- Verification depends on available and generated tests.
-- LeetCode or paid platform scraping is not supported.
-- GeeksforGeeks is handled with restricted retrieval rules.
-- Local model quality depends on the configured model.
-- Large models may require GPU and significant RAM or VRAM.
+Persistent state and caches live under `./data`; service logs live under `./logs/<service>/`.
+
+## Who this is for
+
+Study Buddy is useful for:
+
+- learners moving from syntax knowledge to algorithmic reasoning;
+- interview preparation where explaining trade-offs matters as much as coding;
+- educators who want a structured walkthrough of multiple approaches;
+- developers comparing model providers without coupling an application to one vendor;
+- anyone who wants generated code to be executable and inspectable before trusting it.
+
+## Current boundaries
+
+- Passing tests does not guarantee correctness for every possible input.
+- Explanation quality depends on the selected model and the available evidence.
+- Generated and retrieved code remains untrusted until sandbox verification passes.
+- Java and Python are the currently supported execution languages.
+- LeetCode and other paid-platform scraping is not supported.
+- External discovery is policy-controlled and can be disabled without disabling local reuse.
+- Local models may require significant RAM, VRAM, and startup time.
+
+## The short version
+
+Study Buddy turns this:
+
+> “Here is the optimal code.”
+
+into this:
+
+> “Here is the direct approach, what makes it slow, how the improved idea removes repeated work, how the optimal state evolves on the supplied example, what every important line does, and the returned value and runtime from every test we executed.”
+
+That difference is the product.
+
+---
+
+## Instagram-ready caption
+
+**I built an AI coding explainer that tries to teach the path — not just generate the final answer.**
+
+Study Buddy takes a DSA problem and turns it into a complete learning workspace:
+
+- → brute-force, improved, and optimal approaches
+- → beginner-first intuition and data-structure fundamentals
+- → an annotated code stub and supplied-example dry run
+- → step-by-step state transitions
+- → runnable Java or Python code
+- → sandbox verification for every approach
+- → actual returned values and runtime for every test
+→ retrieval of previously verified solutions when a problem returns
+
+The model layer is provider-neutral through LangChain, so the same application can use NVIDIA-hosted models, Gemini, OpenAI-compatible APIs, or local Ollama through environment configuration.
+
+It is still important to be precise: passing a bounded test suite is not a formal proof. But making generation inspectable, executable, and easier to understand feels like a meaningful step toward more useful learning tools.
+
+Built with React, FastAPI, LangChain, PostgreSQL, Qdrant, Docker, and an isolated code runner.
+
+What would you want an AI tutor to explain before showing you the optimal solution?
+
+`#BuildInPublic #AI #GenerativeAI #EdTech #Programming #DSA #LangChain #RAG #SoftwareEngineering #DeveloperTools`

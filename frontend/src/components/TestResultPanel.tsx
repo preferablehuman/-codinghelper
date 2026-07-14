@@ -1,8 +1,19 @@
 import { Play } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { executeCode } from "../api/client";
 import type { ExecutionResponse, ExecutionResultItem, GeneratedSolution, TestCase, VerificationRun } from "../types/api";
+
+const APPROACH_ORDER: Record<string, number> = {
+  BRUTE_FORCE: 0,
+  NAIVE: 0,
+  IMPROVED: 1,
+  AVERAGE: 1,
+  OPTIMAL: 2,
+  EXPECTED: 2,
+  FINAL: 3,
+  REPAIRED: 4
+};
 
 export default function TestResultPanel({
   tests,
@@ -15,13 +26,27 @@ export default function TestResultPanel({
   solutions?: GeneratedSolution[];
   language: string;
 }) {
-  const latest = verificationRuns.at(-1);
-  const solution = useMemo(() => preferredSolution(solutions), [solutions]);
+  const orderedSolutions = useMemo(() => orderSolutions(solutions), [solutions]);
+  const preferred = useMemo(() => preferredSolution(orderedSolutions), [orderedSolutions]);
+  const [selectedSolutionId, setSelectedSolutionId] = useState<string | null>(preferred?.id ?? null);
+  const solution = orderedSolutions.find((candidate) => candidate.id === selectedSolutionId) ?? preferred;
+  const latest = verificationRuns.filter((run) => run.solution_id === solution?.id).at(-1);
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [runResult, setRunResult] = useState<ExecutionResponse | null>(null);
   const recommendedMinimum = 10;
   const hasRecommendedMinimum = tests.length >= recommendedMinimum;
+
+  useEffect(() => {
+    if (preferred && !orderedSolutions.some((candidate) => candidate.id === selectedSolutionId)) {
+      setSelectedSolutionId(preferred.id);
+    }
+  }, [orderedSolutions, preferred, selectedSolutionId]);
+
+  useEffect(() => {
+    setRunResult(null);
+    setRunError(null);
+  }, [solution?.id]);
 
   async function handleRunGeneratedTests() {
     if (!solution) {
@@ -53,7 +78,10 @@ export default function TestResultPanel({
     <div className="space-y-4">
       <section className="surface p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">Verification</h2>
+          <div>
+            <h2 className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">Verification</h2>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Choose the generated solution whose code should be executed.</p>
+          </div>
           <button
             type="button"
             onClick={() => void handleRunGeneratedTests()}
@@ -61,9 +89,36 @@ export default function TestResultPanel({
             className="focus-ring inline-flex h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-zinc-400"
           >
             <Play size={15} aria-hidden="true" />
-            {running ? "Running..." : `Execute ${tests.length} tests`}
+            {running ? `Running ${solution ? approachLabel(solution.approach_type) : "solution"}...` : `Execute ${tests.length} tests`}
           </button>
         </div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-3" aria-label="Solution to test">
+          {orderedSolutions.map((candidate) => {
+            const selected = candidate.id === solution?.id;
+            return (
+              <button
+                key={candidate.id}
+                type="button"
+                onClick={() => setSelectedSolutionId(candidate.id)}
+                disabled={running}
+                aria-pressed={selected}
+                className={`focus-ring rounded-md border p-3 text-left transition disabled:cursor-wait ${
+                  selected
+                    ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30"
+                    : "border-zinc-200 bg-white hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700 dark:hover:bg-zinc-900"
+                }`}
+              >
+                <span className="font-mono text-xs font-semibold text-zinc-950 dark:text-zinc-100">{approachLabel(candidate.approach_type)}</span>
+                <span className="mt-1 block text-xs text-zinc-500 dark:text-zinc-400">{candidate.algorithm_pattern}</span>
+              </button>
+            );
+          })}
+        </div>
+        {solution ? (
+          <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-300">
+            Selected for execution: <span className="font-semibold text-zinc-950 dark:text-white">{approachLabel(solution.approach_type)}</span>
+          </p>
+        ) : null}
         {latest ? (
           <div className="mt-4 grid gap-3 sm:grid-cols-4">
             <Metric label="Status" value={latest.status} />
@@ -167,6 +222,31 @@ function preferredSolution(solutions: GeneratedSolution[]): GeneratedSolution | 
     solutions.find((solution) => solution.approach_type.toUpperCase() === "FINAL") ??
     solutions.at(-1)
   );
+}
+
+function orderSolutions(solutions: GeneratedSolution[]): GeneratedSolution[] {
+  return [...solutions].sort((left, right) => {
+    const leftRank = APPROACH_ORDER[left.approach_type.toUpperCase()] ?? 10;
+    const rightRank = APPROACH_ORDER[right.approach_type.toUpperCase()] ?? 10;
+    return leftRank - rightRank;
+  });
+}
+
+function approachLabel(approachType: string): string {
+  const normalized = approachType.toUpperCase();
+  if (normalized === "BRUTE_FORCE" || normalized === "NAIVE") {
+    return "Brute force";
+  }
+  if (normalized === "IMPROVED" || normalized === "AVERAGE") {
+    return "Improved";
+  }
+  if (normalized === "OPTIMAL" || normalized === "EXPECTED") {
+    return "Expected solution";
+  }
+  if (normalized === "FINAL") {
+    return "Verified solution";
+  }
+  return approachType.replaceAll("_", " ").toLowerCase();
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

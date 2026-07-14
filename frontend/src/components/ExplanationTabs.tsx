@@ -1,6 +1,6 @@
 import ReactMarkdown from "react-markdown";
 import { Play, Route } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { executeCode } from "../api/client";
 import type { ExecutionResponse, Explanation, GeneratedSolution, TestCase, VerificationRun } from "../types/api";
@@ -52,10 +52,21 @@ export default function ExplanationTabs({
     () => stripApproachHeading(extractApproachMarkdown(explanation?.complexity_analysis || "", activeSolution?.approach_type || "")),
     [activeSolution?.approach_type, explanation?.complexity_analysis]
   );
-  const latestVerification = verificationRuns.at(-1);
+  const latestVerification = verificationRuns.filter((run) => run.solution_id === activeSolution?.id).at(-1);
   const [running, setRunning] = useState(false);
   const [runResult, setRunResult] = useState<ExecutionResponse | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (preferred && !orderedSolutions.some((solution) => solution.id === activeId)) {
+      setActiveId(preferred.id);
+    }
+  }, [activeId, orderedSolutions, preferred]);
+
+  useEffect(() => {
+    setRunResult(null);
+    setRunError(null);
+  }, [activeSolution?.id]);
 
   if (!explanation && !activeSolution) {
     return <p className="text-sm text-zinc-500 dark:text-zinc-400">Explanation will appear when generation completes.</p>;
@@ -107,7 +118,8 @@ export default function ExplanationTabs({
                 key={solution.id}
                 type="button"
                 onClick={() => setActiveId(solution.id)}
-                className={`focus-ring min-h-[126px] rounded-md border p-3 text-left transition duration-200 hover:-translate-y-0.5 ${
+                disabled={running}
+                className={`focus-ring min-h-[126px] rounded-md border p-3 text-left transition duration-200 hover:-translate-y-0.5 disabled:cursor-wait disabled:hover:translate-y-0 ${
                   selected
                     ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30"
                     : "border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-900"
@@ -165,9 +177,16 @@ export default function ExplanationTabs({
       </section>
 
       <section className="surface p-4">
-            <h3 className="text-sm font-semibold text-zinc-950 dark:text-white">Proof run</h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-zinc-950 dark:text-white">Proof run</h3>
+              {activeSolution ? (
+                <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 font-mono text-xs text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200">
+                  Testing: {approachLabel(activeSolution.approach_type)}
+                </span>
+              ) : null}
+            </div>
             <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-              Execute the selected solution against every generated test and inspect the aggregate timing.
+              Execute the solution selected at the top of this explanation against every generated test and inspect the aggregate timing.
             </p>
             <button
               type="button"
@@ -176,7 +195,7 @@ export default function ExplanationTabs({
               className="focus-ring mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-zinc-400"
             >
               <Play size={16} aria-hidden="true" />
-              {running ? "Running..." : `Execute ${tests.length} tests`}
+              {running ? `Running ${activeSolution ? approachLabel(activeSolution.approach_type) : "solution"}...` : `Execute ${tests.length} tests`}
             </button>
             {runResult ? (
               <div className="mt-4 grid grid-cols-2 gap-2">
